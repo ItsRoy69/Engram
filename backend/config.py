@@ -61,9 +61,11 @@ class Settings(BaseSettings):
     rate_limit_chat:   str = "20/minute"
     rate_limit_recall: str = "60/minute"
 
-    max_content_length:       int = 50000
+    max_body_size_bytes:      int = 32768
+
+    max_content_length:       int = 8000
     max_query_length:         int = 5000
-    max_chat_message_length:  int = 10000
+    max_chat_message_length:  int = 8000
     max_history_turns:        int = 20
     bm25_max_corpus:          int = 2000
 

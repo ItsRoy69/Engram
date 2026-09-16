@@ -34,7 +34,6 @@
       color: #6060aa;
     }
 
-    /* Toggle switch */
     .toggle-row {
       padding: 14px 16px;
       display: flex;
@@ -77,7 +76,6 @@
     input:checked + .slider { background: #3a3a8e; }
     input:checked + .slider::before { transform: translateX(16px); background: #8080ff; }
 
-    /* Fields */
     .section { padding: 14px 16px; border-bottom: 1px solid #1e1e3e; }
 
     label {
@@ -89,7 +87,9 @@
       margin-bottom: 6px;
     }
 
-    input[type="text"] {
+    input[type="text"],
+    input[type="password"],
+    input[type="email"] {
       width: 100%;
       padding: 8px 10px;
       background: #1a1a2e;
@@ -100,9 +100,10 @@
       outline: none;
     }
 
-    input[type="text"]:focus { border-color: #5050aa; }
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    input[type="email"]:focus { border-color: #5050aa; }
 
-    /* Status */
     .status {
       padding: 12px 16px;
       display: flex;
@@ -124,7 +125,6 @@
     .dot.online { background: #40c080; }
     .dot.offline { background: #c04040; }
 
-    /* Save button */
     .footer { padding: 14px 16px; }
 
     button {
@@ -172,14 +172,38 @@
   <span id="status-text">Checking API…</span>
 </div>
 
+<div class="section" id="auth-section">
+  <label>Engram account</label>
+  <input type="email" id="login-email" placeholder="you@example.com" autocomplete="username" style="margin-bottom:8px">
+  <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" style="margin-bottom:10px">
+  <div style="display:flex;gap:8px">
+    <button id="login-btn" style="flex:1.4">Sign in</button>
+    <button id="logout-btn" style="flex:1;background:#4a2a4e;display:none">Sign out</button>
+  </div>
+  <p id="login-msg" style="margin-top:8px;font-size:11px;min-height:14px;color:#40c080;line-height:1.5"></p>
+</div>
+
 <div class="section">
   <label>API URL</label>
   <input type="text" id="api-base" value="http://localhost:8000" placeholder="http://localhost:8000">
 </div>
 
 <div class="section">
-  <label>User ID</label>
-  <input type="text" id="user-id" value="default" placeholder="default">
+  <label>API token</label>
+  <input type="password" id="api-token" placeholder="Bearer access token" style="font-size:11px">
+  <p style="margin-top:6px;font-size:11px;color:#6060aa;line-height:1.5">
+    Saved automatically when you sign in above. You can also paste one
+    manually from the chat-ui or <code>POST /auth/login</code>.
+  </p>
+</div>
+
+<div class="section">
+  <label>Refresh token (optional)</label>
+  <input type="password" id="refresh-token" placeholder="Long-lived refresh token" style="font-size:11px">
+  <p style="margin-top:6px;font-size:11px;color:#6060aa;line-height:1.5">
+    Also saved on sign-in. It auto-renews the access token so you never
+    need a fresh one.
+  </p>
 </div>
 
 <div class="footer">

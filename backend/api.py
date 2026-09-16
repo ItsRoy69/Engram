@@ -30,13 +30,14 @@ for _stream in (sys.stdout, sys.stderr):
 
 from fastapi import FastAPI, HTTPException, Request, Depends, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from starlette.types import ASGIApp, Scope, Receive, Send
 
 import brain
 from contradiction import invalidate_memory
@@ -57,6 +58,59 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+class MaxBodySizeMiddleware:
+    """
+    Reject requests whose body exceeds max_bytes with HTTP 413.
+
+    Registered innermost (before the CORS wrappers) so every 413 response
+    still flows back out through the CORS layers and keeps the response
+    readable by the Chrome extension / chat-ui.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] not in ("POST", "PUT", "PATCH"):
+            await self.app(scope, receive, send)
+            return
+
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            chunks.append(chunk)
+            total += len(chunk)
+
+            if total > self.max_bytes:
+                resp = JSONResponse(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    content={"detail": f"Request body exceeds the {self.max_bytes} byte limit"},
+                )
+                await resp(scope, receive, send)
+                return
+
+            if not message.get("more_body", False):
+                break
+
+        body = b"".join(chunks)
+        replayed = False
+
+        async def replay_receive() -> dict:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, replay_receive, send)
+
+app.add_middleware(MaxBodySizeMiddleware, max_bytes=settings.max_body_size_bytes)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
@@ -64,9 +118,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
-
-from fastapi.responses import Response
-from starlette.types import ASGIApp, Scope, Receive, Send
 
 class ExtensionCORSMiddleware:
     ALLOWED_CHAT_ORIGINS = {"https://chatgpt.com", "https://claude.ai"}
@@ -243,8 +294,17 @@ def _verify_memory_owner(memory_id: str, user_id: str) -> None:
     if results[0].payload.get("user_id") != user_id:
         raise HTTPException(403, "Memory does not belong to this user")
 
+def _normalize_content(text: str) -> str:
+    """Strip surrounding whitespace and collapse 3+ newlines down to 2."""
+    return re.sub(r"\n{3,}", "\n\n", text.strip())
+
 class StoreRequest(BaseModel):
-    content: str = Field(..., description="Raw text to store as memories")
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=settings.max_content_length,
+        description="Raw text to store as memories",
+    )
     tags: list[str] = Field(default_factory=list, description="Optional tags")
     history: list[dict] = Field(
         default_factory=list,
@@ -281,7 +341,12 @@ class RecallResponse(BaseModel):
     context_tokens: int
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., description="User message")
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=settings.max_chat_message_length,
+        description="User message",
+    )
     history: list[dict] = Field(default_factory=list)
 
 class ChatResponse(BaseModel):
@@ -305,15 +370,14 @@ class HealthResponse(BaseModel):
 @app.post("/memory/store", response_model=StoreResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.rate_limit_store)
 def store_memory(req: StoreRequest, request: Request, current_user: dict = Depends(get_current_user)):
-    if not req.content.strip():
+    content = _normalize_content(req.content)
+    if not content:
         raise HTTPException(status_code=400, detail="content cannot be empty")
-    if len(req.content) > settings.max_content_length:
-        raise HTTPException(status_code=413, detail=f"content exceeds {settings.max_content_length} characters")
     if len(req.history) > settings.max_history_turns:
         raise HTTPException(status_code=413, detail=f"history exceeds {settings.max_history_turns} turns")
     user_id = current_user["sub"]
     try:
-        result = brain.remember(req.content, user_id=user_id, tags=req.tags, history=req.history)
+        result = brain.remember(content, user_id=user_id, tags=req.tags, history=req.history)
         return StoreResponse(**result)
     except EngramError:
         raise
@@ -375,20 +439,19 @@ def chat(
 ):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="message cannot be empty")
-    if len(req.message) > settings.max_chat_message_length:
-        raise HTTPException(status_code=413, detail=f"message exceeds {settings.max_chat_message_length} characters")
     if len(req.history) > settings.max_history_turns:
         raise HTTPException(status_code=413, detail=f"history exceeds {settings.max_history_turns} turns")
     try:
         import pii as _pii
 
+        message = _normalize_content(req.message)
         user_id = current_user["sub"]
 
-        recall_result = brain.recall(req.message, user_id=user_id)
+        recall_result = brain.recall(message, user_id=user_id)
         memories_used = len(recall_result["memories"])
 
         response_text = brain.chat(
-            req.message,
+            message,
             user_id=user_id,
             history=req.history,
         )
@@ -397,7 +460,7 @@ def chat(
 
         background_tasks.add_task(
             _store_conversation_turn,
-            user_message=req.message,
+            user_message=message,
             assistant_response=response_text,
             user_id=user_id,
             history=req.history,

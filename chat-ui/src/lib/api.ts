@@ -1,5 +1,7 @@
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+import { getUser, getToken, getRefreshToken, accessTokenNeedsRefresh, refreshAccessToken } from "@/lib/auth";
+
 export interface Memory {
   id: string;
   content: string;
@@ -53,21 +55,33 @@ export class EngramApiError extends Error {
   }
 }
 
-function authHeaders(): Record<string, string> {
+function sessionUserId(): string {
+  if (typeof window === "undefined") return "default";
+  return getUser()?.user_id ?? "default";
+}
+
+async function ensureToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  if (accessTokenNeedsRefresh()) await refreshAccessToken();
+  return getToken();
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await ensureToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("engram_token");
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-  }
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
-async function post<T>(path: string, body: object): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
+async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
+  const headers = { ...(init.headers as Record<string, string> | undefined), ...(await authHeaders()) };
+  const res = await fetch(`${API}${path}`, { ...init, headers });
+
+  if (res.status === 401 && !retried && getRefreshToken()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return request<T>(path, init, true);
+  }
+
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
     if (payload && payload.error && payload.code) {
@@ -82,16 +96,6 @@ async function post<T>(path: string, body: object): Promise<T> {
   return res.json();
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, { headers: authHeaders() });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    if (payload && payload.error) throw new EngramApiError(payload as ApiError);
-    throw new EngramApiError({ error: `HTTP ${res.status}`, code: "HTTP_ERROR", status: res.status });
-  }
-  return res.json();
-}
-
 export function friendlyError(e: unknown): string {
   if (e instanceof EngramApiError) return e.message;
   if (e instanceof Error) return e.message;
@@ -99,20 +103,20 @@ export function friendlyError(e: unknown): string {
 }
 
 export const api = {
-  health: () => get<HealthResult>("/health"),
+  health: () => request<HealthResult>("/health"),
 
-  store: (content: string, userId = "default", tags: string[] = []) =>
-    post<StoreResult>("/memory/store", { content, user_id: userId, tags }),
+  store: (content: string, tags: string[] = []) =>
+    request<StoreResult>("/memory/store", { method: "POST", body: JSON.stringify({ content, tags }) }),
 
-  recall: (query: string, userId = "default") =>
-    post<RecallResult>("/memory/recall", { query, user_id: userId }),
+  recall: (query: string) =>
+    request<RecallResult>("/memory/recall", { method: "POST", body: JSON.stringify({ query }) }),
 
-  chat: (message: string, userId = "default", history: { role: string; content: string }[] = []) =>
-    post<ChatResult>("/chat", { message, user_id: userId, history }),
+  chat: (message: string, history: { role: string; content: string }[] = []) =>
+    request<ChatResult>("/chat", { method: "POST", body: JSON.stringify({ message, history }) }),
 
-  list: (userId = "default", limit = 50) =>
-    get<Memory[]>(`/memory/list/${userId}?limit=${limit}`),
+  list: (limit = 50) =>
+    request<Memory[]>(`/memory/list/${sessionUserId()}?limit=${limit}`),
 
   delete: (memoryId: string) =>
-    fetch(`${API}/memory/${memoryId}`, { method: "DELETE" }).then((r) => r.json()),
+    request<{ memory_id: string; status: string }>(`/memory/${memoryId}`, { method: "DELETE" }),
 };

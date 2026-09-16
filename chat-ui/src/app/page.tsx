@@ -74,7 +74,6 @@ export default function Home() {
   const messagesEnd                   = useRef<HTMLDivElement>(null);
   const inputRef                      = useRef<HTMLTextAreaElement>(null);
 
-  const userId      = user?.user_id ?? "default";
   const activeConv  = convs.find(c=>c.id===activeId);
   const messages    = activeConv?.messages ?? [];
 
@@ -115,27 +114,27 @@ export default function Home() {
     setInput("");setSending(true);
     const hist=(convs.find(c=>c.id===cid)?.messages??[]).filter(m=>!m.isThinking).map(m=>({role:m.role,content:m.content}));
     try {
-      const res=await api.chat(text,userId,hist);
+      const res=await api.chat(text,hist);
       upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:res.response,isThinking:false,memoriesUsed:res.memories_used}:m)}));
     } catch(e){
       upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:friendlyError(e),isThinking:false,isError:true}:m)}));
     } finally{setSending(false);setTimeout(()=>inputRef.current?.focus(),50);}
-  },[input,sending,activeId,convs,userId]);
+  },[input,sending,activeId,convs]);
 
   const handleKey=(e:React.KeyboardEvent)=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}};
 
   const loadMems=useCallback(async()=>{
     setLoadingMem(true);
-    try{setMemories(await api.list(userId,200));}catch{setMemories([]);}
+    try{setMemories(await api.list(200));}catch{setMemories([]);}
     finally{setLoadingMem(false);}
-  },[userId]);
+  },[]);
   useEffect(()=>{if(panel==="memories")loadMems();},[panel,loadMems]);
   const filteredMems=memories.filter(m=>m.content.toLowerCase().includes(memSearch.toLowerCase()));
 
   const saveOb=async()=>{
     const ans=obAnswers[obStep].trim();if(!ans)return;
     setObSaving(true);
-    try{await api.store(`${OB_QUESTIONS[obStep]}\n${ans}`,userId,["onboarding"]);}catch{}
+    try{await api.store(`${OB_QUESTIONS[obStep]}\n${ans}`,["onboarding"]);}catch{}
     setObSaving(false);
     if(obStep<OB_QUESTIONS.length-1)setObStep(s=>s+1);else setObDone(true);
   };
@@ -224,7 +223,7 @@ export default function Home() {
                     <p style={{fontSize:11,color:"var(--text-2)",lineHeight:1.6,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{m.content}</p>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6}}>
                       <span style={{fontSize:10,color:"var(--text-3)"}}>{m.created_at?timeAgo(m.created_at):""}</span>
-                      <button onClick={async()=>{await api.delete(m.id);setMemories(p=>p.filter(x=>x.id!==m.id));}}
+                      <button onClick={async()=>{try{await api.delete(m.id);setMemories(p=>p.filter(x=>x.id!==m.id));}catch{}}}
                         style={{background:"none",border:"none",cursor:"pointer",color:"var(--text-3)",fontSize:10,padding:0}}
                         onMouseEnter={e=>(e.currentTarget.style.color="var(--red)")} onMouseLeave={e=>(e.currentTarget.style.color="var(--text-3)")}>
                         Delete

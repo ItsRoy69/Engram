@@ -6,7 +6,14 @@
 
   const SITE = window.location.hostname.includes("claude.ai")
     ? "claude"
-    : "chatgpt";
+    : window.location.hostname.includes("chatgpt.com")
+      ? "chatgpt"
+      : "chatui";
+
+  if (SITE === "chatui") {
+    startChatUiTokenSync();
+    return;
+  }
 
   const ENGRA_MEMORY_RE = /\[Engram memories\][\s\S]*?\[End of memories\]\n\n/;
 
@@ -106,7 +113,7 @@
     el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
   }
 
-  const DEFAULTS = { apiBase: "http://localhost:8000", userId: "default", enabled: true };
+  const DEFAULTS = { apiBase: "http://localhost:8000", apiToken: "", refreshToken: "", enabled: true };
 
   function getConfig() {
     return new Promise((resolve) => {
@@ -143,21 +150,88 @@
     });
   }
 
+  function startChatUiTokenSync() {
+    const ACCESS_KEY  = "engram_token";
+    const REFRESH_KEY = "engram_refresh_token";
+    const USER_KEY    = "engram_user";
+    let lastToken   = null;
+    let lastRefresh = null;
+
+    function readToken(key) {
+      try {
+        return localStorage.getItem(key) || "";
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function syncNow() {
+      const token   = readToken(ACCESS_KEY);
+      const refresh = readToken(REFRESH_KEY);
+      if (!token) return;
+
+      if (token === lastToken && refresh === lastRefresh) return;
+      lastToken   = token;
+      lastRefresh = refresh;
+
+      let userId = "";
+      const rawUser = readToken(USER_KEY);
+      if (rawUser) {
+        try { userId = JSON.parse(rawUser).user_id || ""; } catch { userId = ""; }
+      }
+
+      sendMessage("SYNC_TOKENS", { apiToken: token, refreshToken: refresh, userId })
+        .then((resp) => {
+          if (resp && resp.ok) console.log("[Engram] Tokens synced from chat-ui login");
+        });
+    }
+
+    console.log("[Engram] Token auto-sync active on", location.hostname);
+    syncNow();
+    setInterval(syncNow, 2000);
+  }
+
+  async function postEngram(path, body, cfg) {
+    const getToken = async () => {
+      const resp = await sendMessage("GET_TOKEN", {});
+      return resp && resp.ok && resp.token ? resp.token : cfg.apiToken || "";
+    };
+
+    let token = await getToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const doFetch = () =>
+      fetch(`${cfg.apiBase}${path}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+    let resp = await doFetch();
+
+    if (resp.status === 401 && token) {
+      const fresh = await getToken();
+      if (fresh && fresh !== token) {
+        token = fresh;
+        headers["Authorization"] = `Bearer ${token}`;
+        resp = await doFetch();
+      }
+    }
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
   async function recallMemories(query) {
     const cfg = await getConfig();
     if (!cfg.enabled) return null;
 
-    const relayed = await sendMessage("RECALL", { query, userId: cfg.userId });
+    const relayed = await sendMessage("RECALL", { query });
     if (relayed && relayed.ok && relayed.data) return relayed.data;
 
     try {
-      const resp = await fetch(`${cfg.apiBase}/memory/recall`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, user_id: cfg.userId }),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return await resp.json();
+      return await postEngram("/memory/recall", { query }, cfg);
     } catch (e) {
       console.error("[Engram] recall failed:", e.message);
       return null;
@@ -168,17 +242,11 @@
     const cfg = await getConfig();
     if (!cfg.enabled) return null;
 
-    const relayed = await sendMessage("STORE", { content, userId: cfg.userId });
+    const relayed = await sendMessage("STORE", { content });
     if (relayed && relayed.ok && relayed.data) return relayed.data;
 
     try {
-      const resp = await fetch(`${cfg.apiBase}/memory/store`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, user_id: cfg.userId }),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return await resp.json();
+      return await postEngram("/memory/store", { content }, cfg);
     } catch (e) {
       console.error("[Engram] store failed:", e.message);
       return null;
