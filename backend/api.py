@@ -1,6 +1,10 @@
 """
 Engram — FastAPI Server
 
+All /memory and /chat endpoints require a valid bearer access token
+(obtained from POST /auth/login or /auth/register). The user namespace
+(user_id) is always derived from the JWT, never from the request body.
+
   POST   /memory/store          — full ingestion pipeline (brain.remember)
   POST   /memory/recall         — full retrieval pipeline (brain.recall)
   POST   /chat                  — memory-augmented chat   (brain.chat)
@@ -38,7 +42,7 @@ import brain
 from contradiction import invalidate_memory
 from graph import get_graph_stats
 from config import get_settings
-from auth import router as auth_router, get_optional_user
+from auth import router as auth_router, get_current_user
 
 settings = get_settings()
 
@@ -225,9 +229,22 @@ def handle(e: Exception) -> None:
     err = classify_error(e)
     raise err
 
+def _verify_memory_owner(memory_id: str, user_id: str) -> None:
+    """Confirm a memory exists and belongs to user_id. Raises 404 if not."""
+    from db import get_qdrant
+    client = get_qdrant()
+    results = client.retrieve(
+        collection_name=settings.qdrant_collection,
+        ids=[memory_id],
+        with_payload=["user_id"],
+    )
+    if not results:
+        raise HTTPException(404, "Memory not found")
+    if results[0].payload.get("user_id") != user_id:
+        raise HTTPException(403, "Memory does not belong to this user")
+
 class StoreRequest(BaseModel):
     content: str = Field(..., description="Raw text to store as memories")
-    user_id: str = Field("default", description="User namespace")
     tags: list[str] = Field(default_factory=list, description="Optional tags")
     history: list[dict] = Field(
         default_factory=list,
@@ -247,7 +264,6 @@ class StoreResponse(BaseModel):
 
 class RecallRequest(BaseModel):
     query: str = Field(..., description="Natural language query")
-    user_id: str = Field("default")
 
 class MemoryItem(BaseModel):
     id: str
@@ -266,7 +282,6 @@ class RecallResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(..., description="User message")
-    user_id: str = Field("default")
     history: list[dict] = Field(default_factory=list)
 
 class ChatResponse(BaseModel):
@@ -289,10 +304,14 @@ class HealthResponse(BaseModel):
 
 @app.post("/memory/store", response_model=StoreResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.rate_limit_store)
-def store_memory(req: StoreRequest, request: Request, current_user: dict = Depends(get_optional_user)):
+def store_memory(req: StoreRequest, request: Request, current_user: dict = Depends(get_current_user)):
     if not req.content.strip():
         raise HTTPException(status_code=400, detail="content cannot be empty")
-    user_id = current_user["sub"] if current_user else req.user_id
+    if len(req.content) > settings.max_content_length:
+        raise HTTPException(status_code=413, detail=f"content exceeds {settings.max_content_length} characters")
+    if len(req.history) > settings.max_history_turns:
+        raise HTTPException(status_code=413, detail=f"history exceeds {settings.max_history_turns} turns")
+    user_id = current_user["sub"]
     try:
         result = brain.remember(req.content, user_id=user_id, tags=req.tags, history=req.history)
         return StoreResponse(**result)
@@ -303,10 +322,12 @@ def store_memory(req: StoreRequest, request: Request, current_user: dict = Depen
 
 @app.post("/memory/recall", response_model=RecallResponse)
 @limiter.limit(settings.rate_limit_recall)
-def recall_memories(req: RecallRequest, request: Request, current_user: dict = Depends(get_optional_user)):
+def recall_memories(req: RecallRequest, request: Request, current_user: dict = Depends(get_current_user)):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query cannot be empty")
-    user_id = current_user["sub"] if current_user else req.user_id
+    if len(req.query) > settings.max_query_length:
+        raise HTTPException(status_code=413, detail=f"query exceeds {settings.max_query_length} characters")
+    user_id = current_user["sub"]
     try:
         result = brain.recall(req.query, user_id=user_id)
         memories = [MemoryItem(**m) for m in result["memories"]]
@@ -350,14 +371,18 @@ def chat(
     req: ChatRequest,
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_optional_user),
+    current_user: dict = Depends(get_current_user),
 ):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="message cannot be empty")
+    if len(req.message) > settings.max_chat_message_length:
+        raise HTTPException(status_code=413, detail=f"message exceeds {settings.max_chat_message_length} characters")
+    if len(req.history) > settings.max_history_turns:
+        raise HTTPException(status_code=413, detail=f"history exceeds {settings.max_history_turns} turns")
     try:
         import pii as _pii
 
-        user_id = current_user["sub"] if current_user else req.user_id
+        user_id = current_user["sub"]
 
         recall_result = brain.recall(req.message, user_id=user_id)
         memories_used = len(recall_result["memories"])
@@ -387,8 +412,8 @@ def chat(
 
 @app.get("/memory/list/{user_id}", response_model=list[MemoryListItem])
 @limiter.limit(settings.rate_limit_recall)
-def list_memories(user_id: str, request: Request, limit: int = 50, current_user: dict = Depends(get_optional_user)):
-    if current_user and current_user["sub"] != user_id:
+def list_memories(user_id: str, request: Request, limit: int = 50, current_user: dict = Depends(get_current_user)):
+    if current_user["sub"] != user_id:
         raise HTTPException(403, "Cannot access another user's memories")
     limit = min(limit, 500)
     try:
@@ -433,8 +458,9 @@ def list_memories(user_id: str, request: Request, limit: int = 50, current_user:
 
 @app.delete("/memory/{memory_id}", status_code=status.HTTP_200_OK)
 @limiter.limit(settings.rate_limit_store)
-def delete_memory(memory_id: str, request: Request):
+def delete_memory(memory_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     try:
+        _verify_memory_owner(memory_id, current_user["sub"])
         invalidate_memory(memory_id, reason="User-requested deletion via API")
         return {"memory_id": memory_id, "status": "invalidated"}
     except EngramError:
@@ -444,7 +470,7 @@ def delete_memory(memory_id: str, request: Request):
 
 @app.get("/memory/{memory_id}/history")
 @limiter.limit(settings.rate_limit_recall)
-def memory_history(memory_id: str, request: Request, current_user: dict = Depends(get_optional_user)):
+def memory_history(memory_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Return the full temporal history for a memory.
     Traverses SUPERSEDES edges to show every version of a fact
@@ -455,7 +481,7 @@ def memory_history(memory_id: str, request: Request, current_user: dict = Depend
     """
     try:
         from graph import get_history
-        user_id = current_user["sub"] if current_user else "default"
+        user_id = current_user["sub"]
         history = get_history(memory_id, user_id=user_id)
         return {"memory_id": memory_id, "history": history, "versions": len(history)}
     except EngramError:
@@ -465,7 +491,7 @@ def memory_history(memory_id: str, request: Request, current_user: dict = Depend
 
 @app.get("/memory/{memory_id}/chain")
 @limiter.limit(settings.rate_limit_recall)
-def memory_chain(memory_id: str, request: Request, current_user: dict = Depends(get_optional_user)):
+def memory_chain(memory_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Return the immediate supersession chain for a memory.
     Shows what this memory replaced (if anything) and what replaced it
@@ -475,7 +501,7 @@ def memory_chain(memory_id: str, request: Request, current_user: dict = Depends(
     """
     try:
         from graph import get_supersession_chain
-        user_id = current_user["sub"] if current_user else "default"
+        user_id = current_user["sub"]
         chain = get_supersession_chain(memory_id, user_id=user_id)
         return {"memory_id": memory_id, "chain": chain}
     except EngramError:

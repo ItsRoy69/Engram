@@ -10,7 +10,7 @@ from rank_bm25 import BM25Okapi
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Filter, FieldCondition, MatchValue,
-    SparseVector,
+    SparseVector, OrderBy, Direction,
 )
 from db import get_qdrant
 from embedder import embedder
@@ -86,11 +86,13 @@ def _vector_search(query: str, user_id: str, top_k: int) -> list[dict]:
 
 def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
     """
-    Scroll all valid memories for this user from Qdrant.
-    Returns (contents, doc_metadata_list).
+    Scroll up to `bm25_max_corpus` of the most recent valid memories for
+    this user from Qdrant, newest-first.
 
-    Payload-only scroll (with_vectors=False) so this is fast even
-    for large collections — only text payloads are transferred.
+    Bounded scroll (not a full corpus scan) so BM25 cost stays flat as the
+    user's memory grows. Returns (contents, doc_metadata_list).
+
+    Payload-only scroll (with_vectors=False) — only text payloads transfer.
     """
     client = get_qdrant()
 
@@ -100,8 +102,14 @@ def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
 
     all_docs: list[dict] = []
     offset = None
+    max_docs = settings.bm25_max_corpus
 
-    while True:
+    try:
+        order_by = OrderBy(key="created_at", direction=Direction.DESC)
+    except Exception:
+        order_by = None
+
+    while len(all_docs) < max_docs:
         results, next_offset = client.scroll(
             collection_name=settings.qdrant_collection,
             scroll_filter=Filter(must=[
@@ -109,8 +117,9 @@ def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
                 FieldCondition(key="is_latest", match=MatchValue(value=True)),
                 FieldCondition(key="is_valid",  match=MatchValue(value=True)),
             ]),
-            limit=1000,
+            limit=min(1000, max_docs - len(all_docs)),
             offset=offset,
+            order_by=order_by,
             with_payload=True,
             with_vectors=False,
         )
@@ -130,10 +139,11 @@ def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
 
 def _bm25_search(query: str, user_id: str, top_k: int) -> list[dict]:
     """
-    Full-corpus BM25Okapi keyword search with true IDF weighting.
+    BM25Okapi keyword search with true IDF weighting over a bounded corpus.
 
     How it works:
-      1. Fetch all user memories from Qdrant (payload-only scroll).
+      1. Fetch up to `bm25_max_corpus` of the user's most recent memories
+         from Qdrant (capped, newest-first payload-only scroll).
       2. Tokenise every memory with the shared deterministic tokeniser.
       3. Build a BM25Okapi index (Robertson et al., k1=1.5, b=0.75).
       4. Score the query — rare terms score exponentially higher than
