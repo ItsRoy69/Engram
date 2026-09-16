@@ -38,8 +38,8 @@ export interface HealthResult {
 }
 
 export interface ApiError {
-  error: string;  
-  code: string;    
+  error: string;
+  code: string;
   status: number;
 }
 

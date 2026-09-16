@@ -1,22 +1,50 @@
 (function () {
   "use strict";
 
+  const VERSION = "v3 (relay + direct fallback)";
+  console.log("[Engram]", VERSION, "loaded on", location.hostname);
+
   const SITE = window.location.hostname.includes("claude.ai")
     ? "claude"
     : "chatgpt";
 
+  const ENGRA_MEMORY_RE = /\[Engram memories\][\s\S]*?\[End of memories\]\n\n/;
+
   const SELECTORS = {
     claude: {
-      input: '[data-testid="chat-input"], div[contenteditable="true"]',
-      sendBtn: '[data-testid="send-button"], button[aria-label="Send Message"]',
-      response: '[data-testid="chat-message-content"], .font-claude-message',
-      humanTurn: '[data-testid="human-turn"]',
+      input: [
+        '[data-testid="chat-input"]',
+        'div[contenteditable="true"]',
+      ],
+      sendBtn: [
+        'button[data-testid="send-button"]',
+        'button[aria-label="Send Message"]',
+      ],
+      response: [
+        '[data-testid="chat-message-content"]',
+        '.font-claude-message',
+      ],
+      humanTurn: ['[data-testid="human-turn"]'],
     },
     chatgpt: {
-      input: "#prompt-textarea",
-      sendBtn: '[data-testid="send-button"], button[aria-label="Send prompt"]',
-      response: '[data-message-author-role="assistant"] .markdown',
-      humanTurn: '[data-message-author-role="user"]',
+      input: [
+        'textarea#prompt-textarea',
+        'div#prompt-textarea[contenteditable="true"]',
+        'div[contenteditable="true"][data-id="root"]',
+        'div[role="textbox"][contenteditable="true"]',
+        'textarea[placeholder*="Message ChatGPT"]',
+        'form div[contenteditable="true"]',
+      ],
+      sendBtn: [
+        '#composer-submit-button',
+        'button[data-testid="send-button"]',
+        'button[aria-label*="Send prompt"]',
+      ],
+      response: [
+        '[data-message-author-role="assistant"] .markdown',
+        '[data-message-author-role="assistant"]',
+      ],
+      humanTurn: ['[data-message-author-role="user"]'],
     },
   };
 
@@ -24,45 +52,140 @@
 
   let lastInjectedMemoryBlock = null;
   let isInjecting = false;
+  let sendInProgress = false;
   let lastStoredTurn = "";
 
+  function queryOne(selectors) {
+    for (const s of selectors) {
+      const el = document.querySelector(s);
+      if (el && el.offsetParent !== null) return el;
+    }
+    return null;
+  }
+
+  function queryAllFirst(selectors) {
+    for (const s of selectors) {
+      const els = document.querySelectorAll(s);
+      if (els.length) return els;
+    }
+    return null;
+  }
+
   function getInputEl() {
-    return document.querySelector(sel.input);
+    return queryOne(sel.input);
+  }
+
+  function getSendBtn() {
+    return queryOne(sel.sendBtn);
   }
 
   function getInputText(el) {
     if (!el) return "";
-    return el.value !== undefined ? el.value : el.innerText || el.textContent;
+    return el.value !== undefined ? el.value : el.innerText || el.textContent || "";
   }
+
 
   function setInputText(el, text) {
     if (!el) return;
-    if (el.value !== undefined) {
-      el.value = text;
+    if (el.value !== undefined || el.tagName === "TEXTAREA") {
+      const proto = el.tagName === "TEXTAREA"
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      setter.call(el, text);
       el.dispatchEvent(new Event("input", { bubbles: true }));
-    } else {
-      el.innerText = text;
-      el.dispatchEvent(new InputEvent("input", { bubbles: true }));
-      const range = document.createRange();
-      const sel2 = window.getSelection();
-      range.selectNodeContents(el);
-      range.collapse(false);
-      sel2.removeAllRanges();
-      sel2.addRange(range);
+      return;
     }
+
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand("insertText", false, text);
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
+  }
+
+  const DEFAULTS = { apiBase: "http://localhost:8000", userId: "default", enabled: true };
+
+  function getConfig() {
+    return new Promise((resolve) => {
+      try {
+        if (!chrome.storage?.sync) {
+          resolve(DEFAULTS);
+          return;
+        }
+        chrome.storage.sync.get(DEFAULTS, resolve);
+      } catch {
+        resolve(DEFAULTS);
+      }
+    });
   }
 
   function sendMessage(type, payload) {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type, ...payload }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.warn("[Engram]", chrome.runtime.lastError.message);
+      try {
+        if (!chrome.runtime?.sendMessage) {
           resolve(null);
-        } else {
-          resolve(response);
+          return;
         }
-      });
+        chrome.runtime.sendMessage({ type, ...payload }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.warn("[Engram] messaging failed:", chrome.runtime.lastError.message);
+            resolve(null);
+          } else {
+            resolve(response);
+          }
+        });
+      } catch {
+        resolve(null);
+      }
     });
+  }
+
+  async function recallMemories(query) {
+    const cfg = await getConfig();
+    if (!cfg.enabled) return null;
+
+
+    const relayed = await sendMessage("RECALL", { query, userId: cfg.userId });
+    if (relayed && relayed.ok && relayed.data) return relayed.data;
+
+
+    try {
+      const resp = await fetch(`${cfg.apiBase}/memory/recall`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, user_id: cfg.userId }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    } catch (e) {
+      console.error("[Engram] recall failed:", e.message);
+      return null;
+    }
+  }
+
+  async function storeMemory(content) {
+    const cfg = await getConfig();
+    if (!cfg.enabled) return null;
+
+    const relayed = await sendMessage("STORE", { content, userId: cfg.userId });
+    if (relayed && relayed.ok && relayed.data) return relayed.data;
+
+    try {
+      const resp = await fetch(`${cfg.apiBase}/memory/store`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, user_id: cfg.userId }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    } catch (e) {
+      console.error("[Engram] store failed:", e.message);
+      return null;
+    }
   }
 
   function formatMemoryBlock(memories) {
@@ -94,22 +217,21 @@
 
   async function injectMemories(inputEl) {
     if (isInjecting) return;
-    const query = getInputText(inputEl).trim();
-
-    const cleanQuery = query.replace(/\[Engram memories\][\s\S]*?\[End of memories\]\n\n/, "").trim();
+    const raw = getInputText(inputEl).trim();
+    const cleanQuery = raw.replace(ENGRA_MEMORY_RE, "").trim();
     if (!cleanQuery) return;
 
     isInjecting = true;
     showIndicator("Recalling memories…");
 
     try {
-      const response = await sendMessage("RECALL", { query: cleanQuery });
-      if (!response || !response.ok || !response.data) {
+      const response = await recallMemories(cleanQuery);
+      if (!response) {
         showIndicator("Engram offline");
         return;
       }
 
-      const memories = response.data.memories || [];
+      const memories = response.memories || [];
       if (memories.length === 0) {
         showIndicator("No relevant memories");
         return;
@@ -121,22 +243,61 @@
       showIndicator(`${memories.length} memor${memories.length === 1 ? "y" : "ies"} injected`);
     } catch (e) {
       console.error("[Engram] inject error:", e);
+      showIndicator("Engram error");
     } finally {
       isInjecting = false;
     }
   }
 
-  async function storeConversationTurn() {
-    const humanTurns = document.querySelectorAll(sel.humanTurn);
-    const aiResponses = document.querySelectorAll(sel.response);
 
-    if (!humanTurns.length || !aiResponses.length) return;
+  function realSend() {
+    sendInProgress = true;
+    const inputEl = getInputEl();
+    setTimeout(() => {
+      const btn = getSendBtn();
+      if (btn && !btn.disabled) {
+        btn.click();
+      } else if (inputEl) {
+        inputEl.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Enter", code: "Enter", keyCode: 13,
+          bubbles: true, cancelable: true
+        }));
+      }
+    }, 80);
+    setTimeout(() => { sendInProgress = false; }, 1500);
+  }
+
+  function interceptSubmit(e) {
+    if (sendInProgress || isInjecting) return;
+    const inputEl = getInputEl();
+    if (!inputEl) return;
+
+    const text = getInputText(inputEl).trim();
+    if (!text) return;
+
+    if (ENGRA_MEMORY_RE.test(text)) return;
+
+    const isEnter = e.type === "keydown" && e.key === "Enter" && !e.shiftKey;
+    const isClick = e.type === "click";
+    if (!isEnter && !isClick) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    injectMemories(inputEl).then(() => realSend());
+  }
+
+  async function storeConversationTurn() {
+    const humanTurns = queryAllFirst(sel.humanTurn);
+    const aiResponses = queryAllFirst(sel.response);
+
+    if (!humanTurns || !aiResponses) return;
 
     const lastHuman = humanTurns[humanTurns.length - 1];
     const lastAI = aiResponses[aiResponses.length - 1];
 
     let humanText = (lastHuman.innerText || lastHuman.textContent || "").trim();
-    humanText = humanText.replace(/\[Engram memories\][\s\S]*?\[End of memories\]\n\n/, "").trim();
+    humanText = humanText.replace(ENGRA_MEMORY_RE, "").trim();
     const aiText = (lastAI.innerText || lastAI.textContent || "").trim();
 
     if (!humanText || !aiText) return;
@@ -146,41 +307,13 @@
     if (turnContent === lastStoredTurn) return;
     lastStoredTurn = turnContent;
 
-    const response = await sendMessage("STORE", { content: turnContent });
-    if (response && response.ok && response.data) {
-      const stored = response.data.stored || 0;
+    const response = await storeMemory(turnContent);
+    if (response) {
+      const stored = response.stored || 0;
       if (stored > 0) {
         showIndicator(`${stored} fact${stored === 1 ? "" : "s"} remembered`);
       }
     }
-  }
-
-  function interceptSubmit(e) {
-    const inputEl = getInputEl();
-    if (!inputEl) return;
-
-    const text = getInputText(inputEl).trim();
-    if (!text) return;
-
-    const isEnter = e.type === "keydown" && e.key === "Enter" && !e.shiftKey;
-    const isClick = e.type === "click";
-
-    if (!isEnter && !isClick) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    injectMemories(inputEl).then(() => {
-      if (isEnter) {
-        inputEl.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "Enter", code: "Enter", keyCode: 13,
-          bubbles: true, cancelable: true
-        }));
-      } else {
-        const sendBtn = document.querySelector(sel.sendBtn);
-        if (sendBtn) sendBtn.click();
-      }
-    });
   }
 
   let storeTimer = null;
@@ -204,7 +337,7 @@
 
     inputEl.addEventListener("keydown", interceptSubmit, true);
 
-    const sendBtn = document.querySelector(sel.sendBtn);
+    const sendBtn = getSendBtn();
     if (sendBtn) {
       sendBtn.addEventListener("click", interceptSubmit, true);
     }
@@ -215,10 +348,16 @@
   function tryBind(attempts = 0) {
     if (bindEvents()) {
       console.log("[Engram] Attached to", SITE);
+      if (!window.__engramReadyShown) {
+        window.__engramReadyShown = true;
+        showIndicator("Engram ready");
+      }
       return;
     }
-    if (attempts < 20) {
+    if (attempts < 40) {
       setTimeout(() => tryBind(attempts + 1), 500);
+    } else {
+      console.warn("[Engram] Could not find the input box on", SITE);
     }
   }
 

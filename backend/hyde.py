@@ -23,7 +23,7 @@ def expand(query: str) -> str:
     """
     try:
         expanded = complete(system=HYDE_PROMPT, user=f"Query: {query}")
-        print(f"[Engram] HyDE: '{query[:40]}' → '{expanded[:70]}...'")
+        print(f"[Engram] HyDE: '{query[:40]}' -> '{expanded[:70]}...'")
         return expanded
     except Exception as e:
         print(f"[Engram] HyDE failed, using raw query: {e}")

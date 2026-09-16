@@ -48,7 +48,7 @@ def test_hyde_improves_recall():
     hyde_top = hyde_results[0]["content"] if hyde_results else "nothing"
     print(f"  HyDE top: '{hyde_top[:60]}'")
 
-    # Both should find the camelCase memory — HyDE should score it higher
+
     assert hyde_results, "HyDE search should return results"
     print(f"  ✅ HyDE search returned {len(hyde_results)} results")
 

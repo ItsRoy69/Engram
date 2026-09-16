@@ -26,7 +26,7 @@ TIME_PATTERNS = [
     (r"\btemporarily\b",        timedelta(days=7)),
     (r"\bfor now\b",            timedelta(days=3)),
     (r"\buntil further notice\b", timedelta(days=30)),
-    (r"\bon [a-z]+ \d{1,2}(st|nd|rd|th)?\b", timedelta(days=14)),  # "on Monday 3rd"
+    (r"\bon [a-z]+ \d{1,2}(st|nd|rd|th)?\b", timedelta(days=14)),
 ]
 
 PERMANENT_PATTERNS = [
@@ -68,26 +68,26 @@ def get_expiry(content: str, is_temporary_hint: bool | None = None) -> datetime 
         4. Time-anchor pattern → temporary with specific delta
         5. Default             → permanent
     """
-    # ── 1. Trust the LLM extractor first ─────────────────────────
+
     if is_temporary_hint is True:
         return _now() + timedelta(days=7)
     if is_temporary_hint is False:
         return None  
 
-    # ── 2. Extractor was uncertain (hint=None) — fall back to rules ─
+
     text = content.lower()
 
-    # ── 3. Permanent-phrase override ──────────────────────────────
+
     for pattern in PERMANENT_PATTERNS:
         if re.search(pattern, text):
             return None
 
-    # ── 4. Time-anchor pattern match ──────────────────────────────
+
     for pattern, delta in TIME_PATTERNS:
         if re.search(pattern, text):
             return _now() + delta
 
-    # ── 5. Default: permanent ─────────────────────────────────────
+
     return None
 
 
@@ -118,7 +118,7 @@ def set_ttl(memory_id: str, expires_at: datetime):
     ttl_seconds += 1
     pipe = r.pipeline()
     pipe.setex(f"ttl:{memory_id}", ttl_seconds, expires_at.isoformat())
-    pipe.set(f"ttl_set:{memory_id}", expires_at.isoformat())   # permanent sentinel
+    pipe.set(f"ttl_set:{memory_id}", expires_at.isoformat())
     pipe.execute()
     print(f"[Engram] TTL set [{memory_id[:8]}]: expires in {ttl_seconds}s ({expires_at.strftime('%Y-%m-%d %H:%M')} UTC)")
 
@@ -149,7 +149,7 @@ def is_expired(memory_id: str) -> bool:
         if ttl == -2:
             return True    
         if ttl == -1:
-            return False   # ttl key has no expiry (shouldn't happen) → treat as permanent
+            return False
         if ttl > 0:
             return False   
         return True        

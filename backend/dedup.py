@@ -20,16 +20,16 @@ def is_duplicate(content: str, user_id: str = "default") -> tuple[bool, str, flo
     """
     client = get_qdrant()
 
-    # Check collection exists
+
     existing = [c.name for c in client.get_collections().collections]
     if settings.qdrant_collection not in existing:
         return False, "", 0.0
 
     vector = embedder.embed(content)
 
-    results = client.search(
+    resp = client.query_points(
         collection_name=settings.qdrant_collection,
-        query_vector=vector,
+        query=vector,
         query_filter=Filter(must=[
             FieldCondition(key="user_id", match=MatchValue(value=user_id)),
             FieldCondition(key="is_latest", match=MatchValue(value=True)),
@@ -38,6 +38,7 @@ def is_duplicate(content: str, user_id: str = "default") -> tuple[bool, str, flo
         limit=1,
         with_payload=True
     )
+    results = resp.points
 
     if not results:
         return False, "", 0.0

@@ -1,7 +1,6 @@
-/**
- * Engram — Frontend Auth Helpers
- * Stores JWT in localStorage, provides typed helpers for sign in/up/out.
- */
+
+
+
 
 const ACCESS_TOKEN_KEY  = "engram_token";
 const REFRESH_TOKEN_KEY = "engram_refresh_token";
@@ -12,8 +11,6 @@ export interface User {
   email:    string;
   username: string;
 }
-
-// ── Session storage ───────────────────────────────────────────────
 
 export function saveSession(accessToken: string, refreshToken: string, user: User) {
   localStorage.setItem(ACCESS_TOKEN_KEY,  accessToken);
@@ -67,8 +64,6 @@ export function accessTokenNeedsRefresh(): boolean {
   return payload.exp - Math.floor(Date.now() / 1000) < 60;
 }
 
-// ── API calls ─────────────────────────────────────────────────────
-
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface AuthResponse {
@@ -103,7 +98,6 @@ export async function login(email: string, password: string): Promise<User> {
   saveSession(resp.access_token, resp.refresh_token, user);
   return user;
 }
-
 
 export async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = getRefreshToken();

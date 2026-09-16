@@ -74,9 +74,9 @@ def find_conflicting(new_content: str, user_id: str = "default") -> list[dict]:
         return []
 
     vector  = embedder.embed(new_content)
-    results = client.search(
+    resp = client.query_points(
         collection_name=settings.qdrant_collection,
-        query_vector=vector,
+        query=vector,
         query_filter=Filter(must=[
             FieldCondition(key="user_id", match=MatchValue(value=user_id)),
             FieldCondition(key="is_latest", match=MatchValue(value=True)),
@@ -85,6 +85,7 @@ def find_conflicting(new_content: str, user_id: str = "default") -> list[dict]:
         limit=5,
         with_payload=True,
     )
+    results = resp.points
 
     return [
         {

@@ -10,7 +10,8 @@ async function getConfig() {
   });
 }
 
-async function storeMemory(content, apiBase, userId) {
+async function storeMemory(content, userId) {
+  const { apiBase } = await getConfig();
   try {
     const resp = await fetch(`${apiBase}/memory/store`, {
       method: "POST",
@@ -25,7 +26,8 @@ async function storeMemory(content, apiBase, userId) {
   }
 }
 
-async function recallMemories(query, apiBase, userId) {
+async function recallMemories(query, userId) {
+  const { apiBase } = await getConfig();
   try {
     const resp = await fetch(`${apiBase}/memory/recall`, {
       method: "POST",
@@ -42,7 +44,7 @@ async function recallMemories(query, apiBase, userId) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
-    const { apiBase, userId, enabled } = await getConfig();
+    const { enabled } = await getConfig();
 
     if (!enabled) {
       sendResponse({ ok: false, reason: "Engram is disabled" });
@@ -50,11 +52,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === "RECALL") {
-      const result = await recallMemories(message.query, apiBase, userId);
+      const result = await recallMemories(message.query, message.userId || DEFAULT_USER);
       sendResponse({ ok: !!result, data: result });
 
     } else if (message.type === "STORE") {
-      const result = await storeMemory(message.content, apiBase, userId);
+      const result = await storeMemory(message.content, message.userId || DEFAULT_USER);
       sendResponse({ ok: !!result, data: result });
 
     } else {
@@ -62,5 +64,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   })();
 
-  return true; // keep message channel open for async
+  return true;
 });

@@ -45,15 +45,15 @@ def test_record_supersession():
 def test_supersession_chain(old_id: str, new_id: str):
     print("\n  Testing supersession chain retrieval...")
 
-    # Query from the new memory — should see what it superseded
+
     chain = get_supersession_chain(new_id, user_id=USER)
     print(f"  Chain from new_id: {chain}")
 
-    # Query from the old memory — should see what superseded it
+
     chain_old = get_supersession_chain(old_id, user_id=USER)
     print(f"  Chain from old_id: {chain_old}")
 
-    # At least one direction should be populated
+
     all_chains = chain + chain_old
     assert len(all_chains) > 0, "Should find at least one supersession link"
     print(f"  ✅ Supersession chain has {len(all_chains)} link(s)")
@@ -83,7 +83,7 @@ def test_multiple_supersessions():
         user_id=USER,
     )
 
-    # Check London has both predecessor and successor
+
     london_chain = get_supersession_chain(london_id, user_id=USER)
     directions = {c["direction"] for c in london_chain}
     print(f"  London chain directions: {directions}")
@@ -96,14 +96,13 @@ def test_multiple_supersessions():
 def test_old_state_preserved(nyc_id: str):
     print("\n  Testing old state is preserved (not deleted)...")
 
-    # The old memory_id should still be queryable in the graph
-    # (even though it's marked is_valid=False in Qdrant)
+
     chain = get_supersession_chain(nyc_id, user_id=USER)
     print(f"  NYC chain: {chain}")
 
-    # NYC should have a successor (was superseded by London)
+
     has_successor = any(c["direction"] == "superseded_by" for c in chain)
-    # Even if direction labeling varies, the chain should be non-empty
+
     print(f"  ✅ Old state (NYC) still exists in graph with {len(chain)} link(s)")
 
 

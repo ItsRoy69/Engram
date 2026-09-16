@@ -10,7 +10,7 @@ from pii import mask, restore, has_pii
 
 def test_pii():
 
-    # Test 1: Detects and masks person name + email
+
     text = "John Smith's email is john@example.com and he leads the backend team"
     masked, token_map = mask(text)
     print(f"  Original : {text}")
@@ -20,19 +20,19 @@ def test_pii():
     assert len(token_map) >= 1, "Should have at least 1 token"
     print(f"  ✅ Masking   — {len(token_map)} PII token(s) replaced")
 
-    # Test 2: Restore original from token map
+
     restored = restore(masked, token_map)
     assert "john@example.com" in restored, "Email should be restored"
     print(f"  ✅ Restore   — original values recovered")
 
-    # Test 3: Clean text passes through unchanged
+
     clean = "Team decided API responses should use camelCase"
     masked_clean, token_map_clean = mask(clean)
     assert masked_clean == clean, "Clean text should not be modified"
     assert token_map_clean == {}, "No tokens for clean text"
     print(f"  ✅ Clean text — passed through unchanged")
 
-    # Test 4: has_pii detection
+
     assert has_pii("Call me at +91-9876543210") is True
     assert has_pii("We use PostgreSQL") is False
     print(f"  ✅ Detection — PII presence correctly identified")

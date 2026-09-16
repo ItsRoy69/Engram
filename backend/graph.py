@@ -23,13 +23,13 @@ settings = get_settings()
 
 GRAPH_NAME = "engram"
 
-# ── Relationship types ────────────────────────────────────────────
+
 UPDATES    = "UPDATES"    
 EXTENDS    = "EXTENDS"    
 DERIVES    = "DERIVES"    
 SUPERSEDES = "SUPERSEDES" 
 
-# ── LLM prompt ───────────────────────────────────────────────────
+
 CLASSIFY_PROMPT = """You are a memory graph classifier for a personal AI memory system.
 
 Given two memory facts, classify their relationship:
@@ -50,8 +50,6 @@ Return ONLY valid JSON, no markdown:
 }"""
 
 
-# ── Client ───────────────────────────────────────────────────────
-
 def _get_graph():
     """Connect to FalkorDB and return the engram graph handle."""
     db = FalkorDB(host=settings.falkordb_host, port=settings.falkordb_port)
@@ -61,8 +59,6 @@ def _get_graph():
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-
-# ── Node operations ───────────────────────────────────────────────
 
 def ensure_node(memory_id: str, user_id: str = "default", tcommit: str = None) -> bool:
     """
@@ -87,8 +83,6 @@ def ensure_node(memory_id: str, user_id: str = "default", tcommit: str = None) -
         return False
 
 
-# ── Relationship classification ───────────────────────────────────
-
 def _classify_relationship(old_content: str, new_content: str) -> dict:
     """
     Ask the LLM to classify the relationship between two memory facts.
@@ -111,8 +105,6 @@ def _classify_relationship(old_content: str, new_content: str) -> dict:
         print(f"[Engram:Graph] Classification failed: {e}")
         return {"relationship": "NONE", "confidence": 0.0, "reason": str(e)}
 
-
-# ── Community detection (cycle guard) ────────────────────────────
 
 def _would_create_cycle(from_id: str, to_id: str) -> bool:
     """Check if adding from_id → to_id would create a cycle."""
@@ -151,8 +143,6 @@ def _community_check_passed(from_id: str, to_id: str, user_id: str) -> bool:
     return True
 
 
-# ── Edge creation ─────────────────────────────────────────────────
-
 def _create_edge(from_id: str, to_id: str, rel_type: str, confidence: float, reason: str):
     """Create a directed typed relationship."""
     g = _get_graph()
@@ -173,8 +163,6 @@ def _create_edge(from_id: str, to_id: str, rel_type: str, confidence: float, rea
         f"(conf={confidence:.2f}): {reason[:60]}"
     )
 
-
-# ── Temporal supersession ─────────────────────────────────────────
 
 def record_supersession(
     old_memory_id:  str,
@@ -224,7 +212,7 @@ def record_supersession(
                 "new_id":      new_memory_id,
                 "tcommit":     now,
                 "reason":      reason,
-                "old_content": old_content[:500],  # cap to avoid huge graph properties
+                "old_content": old_content[:500],
                 "new_content": new_content[:500],
             }
         )
@@ -238,8 +226,6 @@ def record_supersession(
         print(f"[Engram:Graph] record_supersession failed (non-critical): {e}")
         return False
 
-
-# ── Temporal query API ────────────────────────────────────────────
 
 def get_history(memory_id: str, user_id: str = "default") -> list[dict]:
     """
@@ -262,7 +248,7 @@ def get_history(memory_id: str, user_id: str = "default") -> list[dict]:
     try:
         g = _get_graph()
 
-        # Walk the full SUPERSEDES chain in both directions
+
         result = g.ro_query(
             "MATCH path = (oldest:Memory)-[:SUPERSEDES*0..20]->(m:Memory {id: $id}) "
             "WHERE oldest.user_id = $user_id "
@@ -318,7 +304,7 @@ def get_supersession_chain(memory_id: str, user_id: str = "default") -> list[dic
 
         row = result.result_set[0]
         chain = []
-        if row[0]:  # has a predecessor
+        if row[0]:
             chain.append({
                 "direction":   "supersedes",
                 "memory_id":   row[0],
@@ -326,7 +312,7 @@ def get_supersession_chain(memory_id: str, user_id: str = "default") -> list[dic
                 "tcommit":     row[2],
                 "old_content": row[3],
             })
-        if row[4]:  # has a successor
+        if row[4]:
             chain.append({
                 "direction": "superseded_by",
                 "memory_id": row[4],
@@ -339,8 +325,6 @@ def get_supersession_chain(memory_id: str, user_id: str = "default") -> list[dic
         print(f"[Engram:Graph] get_supersession_chain failed: {e}")
         return []
 
-
-# ── Public API ────────────────────────────────────────────────────
 
 def link_memories(
     new_memory_id:    str,

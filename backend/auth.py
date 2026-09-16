@@ -33,14 +33,12 @@ bearer = HTTPBearer(auto_error=False)
 
 _limiter = Limiter(key_func=get_remote_address)
 
-# ── Token TTLs ────────────────────────────────────────────────────
+
 ACCESS_TOKEN_TTL  = 60 * 15          
 REFRESH_TOKEN_TTL = 60 * 60 * 24 * 30  
 
 SECRET = os.getenv("AUTH_SECRET", "engram-change-this-secret-in-production")
 
-
-# ── JWT helpers ───────────────────────────────────────────────────
 
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
@@ -82,8 +80,6 @@ def _create_access_token(user_id: str, email: str, username: str) -> str:
         "exp":      int(time.time()) + ACCESS_TOKEN_TTL,
     })
 
-
-# ── Refresh token helpers (Postgres-backed) ───────────────────────
 
 def _create_refresh_token(user_id: str) -> str:
     """
@@ -166,8 +162,6 @@ def _revoke_refresh_token(raw_token: str) -> bool:
     return affected > 0
 
 
-# ── Password hashing ──────────────────────────────────────────────
-
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
     key  = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
@@ -184,13 +178,9 @@ def verify_password(password: str, stored: str) -> bool:
     )
 
 
-# ── DB helper ─────────────────────────────────────────────────────
-
 def _pg():
     return get_pg()
 
-
-# ── FastAPI dependencies ──────────────────────────────────────────
 
 def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
     if not creds:
@@ -210,8 +200,6 @@ def get_optional_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> 
     except Exception:
         return None
 
-
-# ── Request / Response models ─────────────────────────────────────
 
 class RegisterRequest(BaseModel):
     email:    str = Field(..., description="Email address")
@@ -249,8 +237,6 @@ class MeResponse(BaseModel):
     email:    str
     username: str
 
-
-# ── Endpoints ─────────────────────────────────────────────────────
 
 @router.post("/register", response_model=AuthResponse, status_code=201)
 @_limiter.limit("5/hour")

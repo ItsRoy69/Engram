@@ -24,8 +24,7 @@ from config import get_settings
 
 settings = get_settings()
 
-# ── Salience classification patterns ─────────────────────────────
-# High salience: facts that matter long-term regardless of access frequency
+
 HIGH_SALIENCE_PATTERNS = [
     "allerg", "medical", "medication", "diagnosis", "condition",
     "born", "birthday", "anniversary",
@@ -95,8 +94,6 @@ def _now_ts() -> float:
     return datetime.now(timezone.utc).timestamp()
 
 
-# ── Write operations ──────────────────────────────────────────────
-
 def init_retention(memory_id: str, content: str):
     """
     Called when a memory is first stored. Initialises the retention
@@ -132,18 +129,16 @@ def record_access(memory_id: str):
         key = _redis_key(memory_id)
         raw = r.get(key)
         if not raw:
-            return  # memory has no retention meta — skip silently
+            return
 
         meta = json.loads(raw)
         times = meta.get("access_times", [])
         times.append(_now_ts())
-        meta["access_times"] = times[-20:]  # keep last 20 accesses
+        meta["access_times"] = times[-20:]
         r.set(key, json.dumps(meta))
     except Exception as e:
         print(f"[Engram:Retention] record_access failed (non-critical): {e}")
 
-
-# ── Score computation ─────────────────────────────────────────────
 
 def compute_score(memory_id: str) -> float:
     """
@@ -163,7 +158,7 @@ def compute_score(memory_id: str) -> float:
         r   = get_redis()
         raw = r.get(_redis_key(memory_id))
         if not raw:
-            return 1.0  # no metadata → treat as fully retained
+            return 1.0
 
         meta         = json.loads(raw)
         salience     = float(meta.get("salience", _salience_high()))
@@ -185,7 +180,7 @@ def compute_score(memory_id: str) -> float:
 
     except Exception as e:
         print(f"[Engram:Retention] compute_score failed (non-critical): {e}")
-        return 1.0  # fail-safe
+        return 1.0
 
 
 def is_forgotten(memory_id: str) -> bool:
@@ -200,8 +195,6 @@ def is_forgotten(memory_id: str) -> bool:
         return False
     return compute_score(memory_id) < _forget_threshold()
 
-
-# ── Batch operations ──────────────────────────────────────────────
 
 def filter_by_retention(memories: list[dict]) -> list[dict]:
     """

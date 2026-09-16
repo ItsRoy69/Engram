@@ -6,7 +6,6 @@ const saveMsg   = document.getElementById("save-msg");
 const statusDot = document.getElementById("status-dot");
 const statusText = document.getElementById("status-text");
 
-// Load saved settings
 chrome.storage.sync.get(
   { apiBase: "http://localhost:8000", userId: "default", enabled: true },
   (cfg) => {

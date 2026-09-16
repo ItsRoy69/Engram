@@ -65,7 +65,7 @@ def test_fresh_memory_score():
 def test_access_boosts_score():
     print("\n  Testing that accessing a memory boosts its retention score...")
     mid = _mid()
-    # Low-salience content → salience=0.5 → score clearly below 1.0
+
     init_retention(mid, "User prefers tabs over spaces")
 
     score_before = compute_score(mid)
@@ -96,7 +96,7 @@ def test_filter_disabled_by_default():
     for m in memories:
         init_retention(m["id"], m["content"])
 
-    # Monkeypatch _forget_threshold to return 0.0
+
     orig = _ret._forget_threshold
     _ret._forget_threshold = lambda: 0.0
 
@@ -115,7 +115,7 @@ def test_filter_removes_forgotten():
     init_retention(mid, "Some trivial fact with low salience score")
     score = compute_score(mid)
 
-    # Monkeypatch threshold to just above current score
+
     threshold = score + 0.01
     orig = _ret._forget_threshold
     _ret._forget_threshold = lambda: threshold

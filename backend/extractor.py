@@ -156,7 +156,7 @@ def extract(text: str, history: list[dict] | None = None) -> list[dict]:
 
     enriched_text = enrich_with_context(text, history or [])
 
-    # Pass 1 — Extract
+
     try:
         data = _call_llm(EXTRACT_PROMPT, f"Extract facts from:\n\n{enriched_text}")
         facts = data.get("facts", [])

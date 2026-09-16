@@ -36,7 +36,7 @@ def test_reranker():
     for i, r in enumerate(reranked, 1):
         print(f"    {i}. [rerank:{r['rerank_score']}] {r['content'][:55]}")
 
-    # Most relevant result should be about API + camelCase or API + format
+
     top_content = reranked[0]["content"].lower()
     assert "api" in top_content or "camel" in top_content, \
         f"Top reranked result should be API-related, got: {reranked[0]['content']}"

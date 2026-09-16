@@ -159,9 +159,9 @@ def recall(query: str, user_id: str = "default", top_k: int = 5) -> list[dict]:
 
     query_vector = embedder.embed(query)
 
-    results = client.search(
+    resp = client.query_points(
         collection_name=settings.qdrant_collection,
-        query_vector=query_vector,
+        query=query_vector,
         query_filter=Filter(must=[
             FieldCondition(key="user_id", match=MatchValue(value=user_id)),
             FieldCondition(key="is_latest", match=MatchValue(value=True)),
@@ -170,6 +170,7 @@ def recall(query: str, user_id: str = "default", top_k: int = 5) -> list[dict]:
         limit=top_k,
         with_payload=True,
     )
+    results = resp.points
 
     return [
         {

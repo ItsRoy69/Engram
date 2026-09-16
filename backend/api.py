@@ -18,6 +18,13 @@ import os
 import re
 sys.path.insert(0, os.path.dirname(__file__))
 
+
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass
+
 from fastapi import FastAPI, HTTPException, Request, Depends, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -55,7 +62,67 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-# Auth routes: /auth/register, /auth/login, /auth/me
+
+from fastapi.responses import Response
+from starlette.types import ASGIApp, Scope, Receive, Send
+
+
+class ExtensionCORSMiddleware:
+    ALLOWED_CHAT_ORIGINS = {"https://chatgpt.com", "https://claude.ai"}
+    ALLOWED_METHODS = "GET, POST, DELETE, OPTIONS"
+    ALLOWED_HEADERS = "Authorization, Content-Type"
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    @staticmethod
+    def _origin(scope: Scope) -> str:
+        for name, value in scope.get("headers", []):
+            if name.lower() == b"origin":
+                return value.decode("latin-1")
+        return ""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        origin = self._origin(scope)
+        if not (
+            origin.startswith("chrome-extension://")
+            or origin in self.ALLOWED_CHAT_ORIGINS
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        if scope["method"] == "OPTIONS":
+            resp = Response(status_code=200)
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Access-Control-Allow-Methods"] = self.ALLOWED_METHODS
+            resp.headers["Access-Control-Allow-Headers"] = self.ALLOWED_HEADERS
+            resp.headers["Access-Control-Max-Age"] = "86400"
+            await resp(scope, receive, send)
+            return
+
+        async def send_with_cors(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                message.setdefault("headers", [])
+                message["headers"].append(
+                    (b"access-control-allow-origin", origin.encode("latin-1"))
+                )
+                message["headers"].append(
+                    (b"access-control-allow-methods", self.ALLOWED_METHODS.encode())
+                )
+                message["headers"].append(
+                    (b"access-control-allow-headers", self.ALLOWED_HEADERS.encode())
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
+
+app.add_middleware(ExtensionCORSMiddleware)
+
+
 app.include_router(auth_router)
 
 
@@ -313,21 +380,21 @@ def chat(
 
         user_id = current_user["sub"] if current_user else req.user_id
 
-        # Recall relevant memories (also used for badge count)
+
         recall_result = brain.recall(req.message, user_id=user_id)
         memories_used = len(recall_result["memories"])
 
-        # Generate response
+
         response_text = brain.chat(
             req.message,
             user_id=user_id,
             history=req.history,
         )
 
-        # Restore any PII tokens that were masked before storage
+
         response_text = _pii.restore(response_text)
 
-        # Store turn after response is sent — non-blocking, lifecycle-managed
+
         background_tasks.add_task(
             _store_conversation_turn,
             user_message=req.message,

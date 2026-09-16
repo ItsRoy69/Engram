@@ -13,12 +13,11 @@ from config import get_settings
 
 settings = get_settings()
 
-# ── Load engines once ─────────────────────────
+
 _analyzer  = AnalyzerEngine()
 _anonymizer = AnonymizerEngine()
 
-# ── In-memory cache: token → original value ───
-# Populated from DB on restore() if not cached locally.
+
 _cache: dict[str, str] = {}
 
 PII_ENTITIES = [
@@ -74,8 +73,6 @@ def _load_from_db(token: str) -> str | None:
         return None
 
 
-# ── Public API ────────────────────────────────
-
 def mask(text: str) -> tuple[str, dict[str, str]]:
     """
     Scan text for PII and replace with tokens.
@@ -106,7 +103,7 @@ def mask(text: str) -> tuple[str, dict[str, str]]:
         operators=operators,
     )
 
-    # Persist each token to DB and update in-memory cache
+
     for token, original in token_map.items():
         pii_type = next(
             (r.entity_type for r in results
@@ -127,21 +124,21 @@ def restore(masked_text: str, token_map: dict[str, str] | None = None) -> str:
     """
     result = masked_text
 
-    # Collect all tokens present in the text
+
     import re
     tokens_in_text = re.findall(r'\[PII_[A-Z_]+_[0-9a-f]{8}\]', result)
 
     for token in tokens_in_text:
-        # 1. Try provided token_map
+
         original = (token_map or {}).get(token)
-        # 2. Try in-memory cache
+
         if not original:
             original = _cache.get(token)
-        # 3. Try DB
+
         if not original:
             original = _load_from_db(token)
             if original:
-                _cache[token] = original  # warm the cache
+                _cache[token] = original
         if original:
             result = result.replace(token, original)
 

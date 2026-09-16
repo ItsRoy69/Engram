@@ -21,8 +21,6 @@ settings = get_settings()
 SPARSE_FIELD = "text_sparse"
 
 
-# ── Shared deterministic tokeniser ───────────────────────────────
-
 def tokenize(text: str) -> list[str]:
     """
     Deterministic tokeniser shared by storage (memory.py) and search.
@@ -60,16 +58,14 @@ def tokens_to_sparse_vector(tokens: list[str]) -> SparseVector:
     )
 
 
-# ── Dense vector search ───────────────────────────────────────────
-
 def _vector_search(query: str, user_id: str, top_k: int) -> list[dict]:
     """Dense cosine-similarity search via Qdrant."""
     client = get_qdrant()
     query_vector = embedder.embed(query)
 
-    results = client.search(
+    resp = client.query_points(
         collection_name=settings.qdrant_collection,
-        query_vector=query_vector,
+        query=query_vector,
         query_filter=Filter(must=[
             FieldCondition(key="user_id", match=MatchValue(value=user_id)),
             FieldCondition(key="is_latest", match=MatchValue(value=True)),
@@ -78,6 +74,7 @@ def _vector_search(query: str, user_id: str, top_k: int) -> list[dict]:
         limit=top_k,
         with_payload=True,
     )
+    results = resp.points
 
     return [
         {
@@ -90,8 +87,6 @@ def _vector_search(query: str, user_id: str, top_k: int) -> list[dict]:
         for r in results
     ]
 
-
-# ── BM25 corpus fetch ─────────────────────────────────────────────
 
 def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
     """
@@ -137,8 +132,6 @@ def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
     contents = [d["content"] for d in all_docs]
     return contents, all_docs
 
-
-# ── BM25Okapi keyword search ──────────────────────────────────────
 
 def _bm25_search(query: str, user_id: str, top_k: int) -> list[dict]:
     """
@@ -197,8 +190,6 @@ def _bm25_search(query: str, user_id: str, top_k: int) -> list[dict]:
     return results
 
 
-# ── RRF merge ─────────────────────────────────────────────────────
-
 def _rrf_merge(
     vector_results: list[dict],
     bm25_results:   list[dict],
@@ -232,8 +223,6 @@ def _rrf_merge(
         for mid in sorted_ids
     ]
 
-
-# ── Public API ────────────────────────────────────────────────────
 
 def hybrid_search(query: str, user_id: str = "default", top_k: int = None) -> list[dict]:
     """

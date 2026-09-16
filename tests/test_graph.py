@@ -105,7 +105,7 @@ def test_cycle_prevention():
 
     no_cycle = _would_create_cycle("mem-cycle-A", "mem-cycle-C")
     print(f"    Spurious cycle A→C detected: {no_cycle}")
-    # A→C is a shortcut, not a cycle — this could go either way depending on path depth
+
     print("  ✅ Cycle detection working")
 
 

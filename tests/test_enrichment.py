@@ -76,7 +76,7 @@ def test_disabled_via_config():
     assert enriched == chunk, f"lookback=0 should skip enrichment, got: '{enriched}'"
     print(f"  ✅ lookback=0 → passthrough")
 
-    extractor.settings.sliding_window_lookback = original  # restore
+    extractor.settings.sliding_window_lookback = original
 
 
 if __name__ == "__main__":

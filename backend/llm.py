@@ -23,8 +23,6 @@ from config import get_settings
 settings = get_settings()
 
 
-# ── Provider detection ────────────────────────────────────────────
-
 def get_provider() -> str:
     return os.getenv("LLM_PROVIDER", "gemini").lower().strip()
 
@@ -40,8 +38,6 @@ def get_model() -> str:
     }
     return defaults.get(get_provider(), "gemini-3-flash-preview")
 
-
-# ── Gemini ────────────────────────────────────────────────────────
 
 def _gemini_complete(system: str, user: str) -> str:
     import google.generativeai as genai
@@ -72,8 +68,6 @@ def _gemini_chat(system: str, history: list[dict], message: str) -> str:
     return response.text.strip()
 
 
-# ── OpenAI ────────────────────────────────────────────────────────
-
 def _openai_complete(system: str, user: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -93,7 +87,7 @@ def _openai_chat(system: str, history: list[dict], message: str) -> str:
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     messages = [{"role": "system", "content": system}]
     for m in history:
-        # Normalize role: Gemini uses "model", OpenAI uses "assistant"
+
         role = "assistant" if m["role"] == "model" else m["role"]
         messages.append({"role": role, "content": m["content"]})
     messages.append({"role": "user", "content": message})
@@ -104,8 +98,6 @@ def _openai_chat(system: str, history: list[dict], message: str) -> str:
     )
     return resp.choices[0].message.content.strip()
 
-
-# ── Anthropic (Claude) ────────────────────────────────────────────
 
 def _anthropic_complete(system: str, user: str) -> str:
     import anthropic
@@ -135,8 +127,6 @@ def _anthropic_chat(system: str, history: list[dict], message: str) -> str:
     )
     return resp.content[0].text.strip()
 
-
-# ── DeepSeek (OpenAI-compatible API) ─────────────────────────────
 
 def _deepseek_complete(system: str, user: str) -> str:
     from openai import OpenAI
@@ -173,8 +163,6 @@ def _deepseek_chat(system: str, history: list[dict], message: str) -> str:
     )
     return resp.choices[0].message.content.strip()
 
-
-# ── Public interface ──────────────────────────────────────────────
 
 _COMPLETE = {
     "gemini":    _gemini_complete,

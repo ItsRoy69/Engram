@@ -92,9 +92,9 @@ def remember(content: str, user_id: str = "default", tags: list[str] = [], histo
         try:
             client = get_qdrant()
             vec = _embedder.embed(fact_content)
-            nearby = client.search(
+            nearby_resp = client.query_points(
                 collection_name=settings.qdrant_collection,
-                query_vector=vec,
+                query=vec,
                 query_filter=Filter(must=[
                     FieldCondition(key="user_id", match=MatchValue(value=user_id)),
                     FieldCondition(key="is_latest", match=MatchValue(value=True)),
@@ -103,6 +103,7 @@ def remember(content: str, user_id: str = "default", tags: list[str] = [], histo
                 limit=5,
                 with_payload=True,
             )
+            nearby = nearby_resp.points
             candidates_for_graph = [
                 {"id": str(r.id), "content": r.payload["content"], "score": r.score}
                 for r in nearby
@@ -141,7 +142,7 @@ def recall(query: str, user_id: str = "default") -> dict:
         seen_ids = {c["id"] for c in active}
         graph_additions = []
 
-        for candidate in active[:5]:  # bound latency — only expand top 5
+        for candidate in active[:5]:
             related = get_related(candidate["id"], user_id=user_id, depth=1)
             for rel in related:
                 if rel["id"] not in seen_ids:
@@ -185,8 +186,6 @@ def recall(query: str, user_id: str = "default") -> dict:
         "context_tokens": total_tokens,
     }
 
-
-# ── CHAT ─────────────────────────────────────────────────────────
 
 def chat(message: str, user_id: str = "default", history: list[dict] = []) -> str:
     """

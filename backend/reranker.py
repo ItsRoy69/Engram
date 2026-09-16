@@ -33,15 +33,15 @@ def rerank(query: str, candidates: list[dict], top_k: int = None) -> list[dict]:
 
     model = _load_reranker(settings.reranker_model)
 
-    # Cross-encoder scores query+document pairs jointly
+
     pairs = [(query, c["content"]) for c in candidates]
     scores = model.predict(pairs)
 
-    # Attach rerank score to each candidate
+
     for i, candidate in enumerate(candidates):
         candidate["rerank_score"] = round(float(scores[i]), 4)
 
-    # Sort by rerank score descending
+
     reranked = sorted(candidates, key=lambda x: x["rerank_score"], reverse=True)
 
     return reranked[:top_k]
