@@ -7,9 +7,7 @@ sys.path.append("backend")
 
 from pii import mask, restore, has_pii
 
-
 def test_pii():
-
 
     text = "John Smith's email is john@example.com and he leads the backend team"
     masked, token_map = mask(text)
@@ -20,11 +18,9 @@ def test_pii():
     assert len(token_map) >= 1, "Should have at least 1 token"
     print(f"  ✅ Masking   — {len(token_map)} PII token(s) replaced")
 
-
     restored = restore(masked, token_map)
     assert "john@example.com" in restored, "Email should be restored"
     print(f"  ✅ Restore   — original values recovered")
-
 
     clean = "Team decided API responses should use camelCase"
     masked_clean, token_map_clean = mask(clean)
@@ -32,11 +28,9 @@ def test_pii():
     assert token_map_clean == {}, "No tokens for clean text"
     print(f"  ✅ Clean text — passed through unchanged")
 
-
     assert has_pii("Call me at +91-9876543210") is True
     assert has_pii("We use PostgreSQL") is False
     print(f"  ✅ Detection — PII presence correctly identified")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — PII Masking Test\n")

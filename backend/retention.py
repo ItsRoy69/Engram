@@ -24,7 +24,6 @@ from config import get_settings
 
 settings = get_settings()
 
-
 HIGH_SALIENCE_PATTERNS = [
     "allerg", "medical", "medication", "diagnosis", "condition",
     "born", "birthday", "anniversary",
@@ -37,20 +36,17 @@ HIGH_SALIENCE_PATTERNS = [
     "password", "secret",
 ]
 
-
 def _salience_high() -> float:
     try:
         return settings.retention_salience_high
     except AttributeError:
         return 1.0
 
-
 def _salience_low() -> float:
     try:
         return settings.retention_salience_low
     except AttributeError:
         return 0.5
-
 
 def _classify_salience(content: str) -> float:
     """
@@ -63,13 +59,11 @@ def _classify_salience(content: str) -> float:
             return _salience_high()
     return _salience_low()
 
-
 def _decay_rate() -> float:
     try:
         return settings.retention_decay_rate
     except AttributeError:
         return 0.01
-
 
 def _access_boost() -> float:
     try:
@@ -77,22 +71,18 @@ def _access_boost() -> float:
     except AttributeError:
         return 0.1
 
-
 def _forget_threshold() -> float:
     try:
         return settings.retention_forget_threshold
     except AttributeError:
         return 0.0
 
-
 def _redis_key(memory_id: str) -> str:
     return f"retention:{memory_id}:meta"
-
 
 def _now_ts() -> float:
     """Current UTC timestamp as float seconds."""
     return datetime.now(timezone.utc).timestamp()
-
 
 def init_retention(memory_id: str, content: str):
     """
@@ -114,7 +104,6 @@ def init_retention(memory_id: str, content: str):
         print(f"[Engram:Retention] Init [{memory_id[:8]}] salience={salience:.1f}")
     except Exception as e:
         print(f"[Engram:Retention] init_retention failed (non-critical): {e}")
-
 
 def record_access(memory_id: str):
     """
@@ -138,7 +127,6 @@ def record_access(memory_id: str):
         r.set(key, json.dumps(meta))
     except Exception as e:
         print(f"[Engram:Retention] record_access failed (non-critical): {e}")
-
 
 def compute_score(memory_id: str) -> float:
     """
@@ -182,7 +170,6 @@ def compute_score(memory_id: str) -> float:
         print(f"[Engram:Retention] compute_score failed (non-critical): {e}")
         return 1.0
 
-
 def is_forgotten(memory_id: str) -> bool:
     """
     Returns True if the memory's retention score has fallen below the
@@ -194,7 +181,6 @@ def is_forgotten(memory_id: str) -> bool:
     if _forget_threshold() <= 0.0:
         return False
     return compute_score(memory_id) < _forget_threshold()
-
 
 def filter_by_retention(memories: list[dict]) -> list[dict]:
     """
@@ -232,7 +218,6 @@ def filter_by_retention(memories: list[dict]) -> list[dict]:
         result.append(memory)
 
     return result
-
 
 def get_retention_stats(memory_ids: list[str]) -> list[dict]:
     """

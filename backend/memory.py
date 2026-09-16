@@ -20,10 +20,8 @@ settings = get_settings()
 
 SPARSE_FIELD = "text_sparse"
 
-
 def _get_client() -> QdrantClient:
     return get_qdrant()
-
 
 def _ensure_collection(client: QdrantClient):
     """
@@ -72,7 +70,6 @@ def _ensure_collection(client: QdrantClient):
 
     _ensure_payload_indexes(client)
 
-
 def _ensure_payload_indexes(client: QdrantClient):
     """
     Create payload indexes for the fields used in every search filter.
@@ -94,8 +91,7 @@ def _ensure_payload_indexes(client: QdrantClient):
                 field_schema=schema_type,
             )
         except Exception:
-            pass  
-
+            pass
 
 def _collection_has_sparse(client: QdrantClient) -> bool:
     """Return True if the collection has the sparse vector field configured."""
@@ -105,7 +101,6 @@ def _collection_has_sparse(client: QdrantClient) -> bool:
         return SPARSE_FIELD in sparse_configs
     except Exception:
         return False
-
 
 def store(content: str, user_id: str = "default", tags: list[str] = []) -> str:
     """
@@ -147,7 +142,6 @@ def store(content: str, user_id: str = "default", tags: list[str] = []) -> str:
 
     print(f"[Engram] Stored [{memory_id[:8]}]: {content[:60]}")
     return memory_id
-
 
 def recall(query: str, user_id: str = "default", top_k: int = 5) -> list[dict]:
     """

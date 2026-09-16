@@ -35,7 +35,6 @@ export default function AuthPage() {
     <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",padding:16,fontFamily:"'Geist',sans-serif"}}>
       <div style={{width:"100%",maxWidth:380}}>
 
-        { }
         <div style={{textAlign:"center",marginBottom:32}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8}}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round">
@@ -46,10 +45,8 @@ export default function AuthPage() {
           <p style={{fontSize:13,color:"var(--text-3)"}}>Your private AI memory layer</p>
         </div>
 
-        { }
         <div style={{background:"var(--bg-2)",border:"1px solid var(--border)",borderRadius:20,padding:24}}>
 
-          { }
           <div style={{display:"flex",gap:4,background:"var(--bg-3)",borderRadius:12,padding:4,marginBottom:24}}>
             {(["signin","signup"] as Mode[]).map(m=>(
               <button key={m} onClick={()=>{setMode(m);setError("");}} style={{
@@ -63,7 +60,7 @@ export default function AuthPage() {
           </div>
 
           <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:14}}>
-            { }
+
             <div>
               <label style={{display:"block",fontSize:11,color:"var(--text-3)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,fontWeight:500}}>Email</label>
               <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="you@example.com" style={{
@@ -73,7 +70,6 @@ export default function AuthPage() {
               }} onFocus={e=>(e.target.style.borderColor="var(--border-2)")} onBlur={e=>(e.target.style.borderColor="var(--border)")}/>
             </div>
 
-            { }
             {mode==="signup"&&(
               <div>
                 <label style={{display:"block",fontSize:11,color:"var(--text-3)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,fontWeight:500}}>Username</label>
@@ -85,7 +81,6 @@ export default function AuthPage() {
               </div>
             )}
 
-            { }
             <div>
               <label style={{display:"block",fontSize:11,color:"var(--text-3)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,fontWeight:500}}>Password</label>
               <input type="password" value={password} onChange={e=>setPass(e.target.value)} required
@@ -96,7 +91,6 @@ export default function AuthPage() {
                 }} onFocus={e=>(e.target.style.borderColor="var(--border-2)")} onBlur={e=>(e.target.style.borderColor="var(--border)")}/>
             </div>
 
-            { }
             {error&&(
               <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:10,padding:"10px 12px"}}>
                 <span style={{color:"var(--red)",fontSize:13,flexShrink:0}}>⚠</span>
@@ -104,7 +98,6 @@ export default function AuthPage() {
               </div>
             )}
 
-            { }
             <button type="submit" disabled={loading} style={{
               padding:"11px 0",background:"var(--accent)",border:"none",borderRadius:12,
               color:"white",fontSize:13,fontWeight:500,cursor:loading?"default":"pointer",

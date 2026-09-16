@@ -1,7 +1,3 @@
-
-
-
-
 const ACCESS_TOKEN_KEY  = "engram_token";
 const REFRESH_TOKEN_KEY = "engram_refresh_token";
 const USER_KEY          = "engram_user";

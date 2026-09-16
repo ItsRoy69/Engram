@@ -11,7 +11,6 @@ from config import get_settings
 
 settings = get_settings()
 
-
 def is_duplicate(content: str, user_id: str = "default") -> tuple[bool, str, float]:
     """
     Check if a semantically identical memory already exists.
@@ -19,7 +18,6 @@ def is_duplicate(content: str, user_id: str = "default") -> tuple[bool, str, flo
     Returns (False, "", 0.0) if no duplicate found.
     """
     client = get_qdrant()
-
 
     existing = [c.name for c in client.get_collections().collections]
     if settings.qdrant_collection not in existing:

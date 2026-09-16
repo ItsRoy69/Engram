@@ -17,10 +17,8 @@ from retention import (
 import retention as _ret
 import uuid
 
-
 def _mid():
     return str(uuid.uuid4())
-
 
 def test_salience_classification():
     print("  Testing salience classification...")
@@ -52,7 +50,6 @@ def test_salience_classification():
         assert score >= 0.4, f"Low-salience should start ~0.5, got {score}: '{content}'"
         print(f"  ✓  Low  [{score:.3f}]: '{content[:50]}'")
 
-
 def test_fresh_memory_score():
     print("\n  Testing fresh memory has high score...")
     mid = _mid()
@@ -60,7 +57,6 @@ def test_fresh_memory_score():
     score = compute_score(mid)
     assert score >= 0.9, f"Fresh high-salience memory should score near 1.0, got {score}"
     print(f"  ✅ Fresh memory score: {score:.4f}")
-
 
 def test_access_boosts_score():
     print("\n  Testing that accessing a memory boosts its retention score...")
@@ -85,7 +81,6 @@ def test_access_boosts_score():
     )
     print(f"  ✅ Score increased by {score_after - score_before:.4f} after 3 accesses")
 
-
 def test_filter_disabled_by_default():
     print("\n  Testing filter is disabled by default (threshold=0)...")
 
@@ -95,7 +90,6 @@ def test_filter_disabled_by_default():
     ]
     for m in memories:
         init_retention(m["id"], m["content"])
-
 
     orig = _ret._forget_threshold
     _ret._forget_threshold = lambda: 0.0
@@ -107,14 +101,12 @@ def test_filter_disabled_by_default():
         f"With threshold=0, no memories should be filtered. Got {len(filtered)}/{len(memories)}"
     print(f"  ✅ All {len(memories)} memories passed (threshold disabled)")
 
-
 def test_filter_removes_forgotten():
     print("\n  Testing filter removes memories below threshold...")
 
     mid = _mid()
     init_retention(mid, "Some trivial fact with low salience score")
     score = compute_score(mid)
-
 
     threshold = score + 0.01
     orig = _ret._forget_threshold
@@ -129,7 +121,6 @@ def test_filter_removes_forgotten():
         f"Memory with score {score:.4f} should be filtered at threshold {threshold:.4f}"
     print(f"  ✅ Memory with score {score:.4f} correctly filtered at threshold {threshold:.4f}")
 
-
 def test_missing_metadata_safe():
     print("\n  Testing missing metadata returns safe default (1.0)...")
     fake_id = "nonexistent-" + _mid()
@@ -137,7 +128,6 @@ def test_missing_metadata_safe():
     assert score == 1.0, f"Missing metadata should return 1.0, got {score}"
     assert not is_forgotten(fake_id), "Missing metadata should never trigger forgotten"
     print(f"  ✅ Missing metadata → score={score} (safe default)")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Retention Scoring Test\n")

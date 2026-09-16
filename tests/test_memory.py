@@ -7,7 +7,6 @@ sys.path.append("backend")
 
 from memory import store, recall
 
-
 def test_store_and_recall():
 
     print("  Storing 4 memories...")
@@ -33,7 +32,6 @@ def test_store_and_recall():
     results = recall("database we use")
     assert len(results) > 0
     print(f"  ✅ Top result (score {results[0]['score']}): {results[0]['content']}")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Memory Store & Recall Test\n")

@@ -13,10 +13,8 @@ from config import get_settings
 
 settings = get_settings()
 
-
 _analyzer  = AnalyzerEngine()
 _anonymizer = AnonymizerEngine()
-
 
 _cache: dict[str, str] = {}
 
@@ -33,10 +31,8 @@ PII_ENTITIES = [
     "MEDICAL_LICENSE",
 ]
 
-
 def _pg_conn():
     return get_pg()
-
 
 def _save_to_db(token: str, original: str, pii_type: str):
     """Persist a token → original mapping to PostgreSQL."""
@@ -55,7 +51,6 @@ def _save_to_db(token: str, original: str, pii_type: str):
     except Exception as e:
         print(f"[Engram:PII] DB save failed (non-critical): {e}")
 
-
 def _load_from_db(token: str) -> str | None:
     """Look up a token in PostgreSQL. Returns original value or None."""
     try:
@@ -71,7 +66,6 @@ def _load_from_db(token: str) -> str | None:
     except Exception as e:
         print(f"[Engram:PII] DB load failed: {e}")
         return None
-
 
 def mask(text: str) -> tuple[str, dict[str, str]]:
     """
@@ -103,7 +97,6 @@ def mask(text: str) -> tuple[str, dict[str, str]]:
         operators=operators,
     )
 
-
     for token, original in token_map.items():
         pii_type = next(
             (r.entity_type for r in results
@@ -115,7 +108,6 @@ def mask(text: str) -> tuple[str, dict[str, str]]:
 
     return anonymized.text, token_map
 
-
 def restore(masked_text: str, token_map: dict[str, str] | None = None) -> str:
     """
     Restore original PII values in masked_text.
@@ -123,7 +115,6 @@ def restore(masked_text: str, token_map: dict[str, str] | None = None) -> str:
     Falls back to DB lookup for tokens not in token_map (cross-session restore).
     """
     result = masked_text
-
 
     import re
     tokens_in_text = re.findall(r'\[PII_[A-Z_]+_[0-9a-f]{8}\]', result)
@@ -143,7 +134,6 @@ def restore(masked_text: str, token_map: dict[str, str] | None = None) -> str:
             result = result.replace(token, original)
 
     return result
-
 
 def has_pii(text: str) -> bool:
     """Quick check — does this text contain any PII?"""

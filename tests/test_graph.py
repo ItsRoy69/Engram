@@ -27,7 +27,6 @@ from graph import (
 
 USER = "test_graph"
 
-
 def test_node_creation():
     print("  Testing ensure_node()...")
     ok = ensure_node("mem-test-001", USER)
@@ -35,7 +34,6 @@ def test_node_creation():
     ok2 = ensure_node("mem-test-001", USER)
     assert ok2, "ensure_node should be idempotent"
     print("  ✅ Node creation working")
-
 
 def test_relationship_classification():
     print("\n  Testing _classify_relationship()...")
@@ -66,7 +64,6 @@ def test_relationship_classification():
 
     print("  ✅ Classification working")
 
-
 def test_link_memories():
     print("\n  Testing link_memories()...")
     ensure_node("mem-old-001", USER)
@@ -88,7 +85,6 @@ def test_link_memories():
 
     print(f"  ✅ link_memories() executed (edges={len(edges)}, gate may have filtered)")
 
-
 def test_cycle_prevention():
     print("\n  Testing cycle prevention...")
     ensure_node("mem-cycle-A", USER)
@@ -108,7 +104,6 @@ def test_cycle_prevention():
 
     print("  ✅ Cycle detection working")
 
-
 def test_get_related():
     print("\n  Testing get_related()...")
     related = get_related("mem-cycle-A", user_id=USER, depth=2)
@@ -118,12 +113,10 @@ def test_get_related():
     assert len(related) >= 1, "Should find at least 1 related memory via graph"
     print("  ✅ get_related() working")
 
-
 def test_invalidate_edges():
     print("\n  Testing invalidate_edges()...")
     invalidate_edges("mem-cycle-A")
     print("  ✅ invalidate_edges() working")
-
 
 def test_graph_stats():
     print("\n  Testing get_graph_stats()...")
@@ -132,7 +125,6 @@ def test_graph_stats():
     print(f"    UPDATES: {stats['updates']}, EXTENDS: {stats['extends']}, DERIVES: {stats['derives']}")
     assert stats["nodes"] >= 0
     print("  ✅ get_graph_stats() working")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Graph Module Test\n")

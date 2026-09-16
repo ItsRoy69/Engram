@@ -84,7 +84,6 @@
     return el.value !== undefined ? el.value : el.innerText || el.textContent || "";
   }
 
-
   function setInputText(el, text) {
     if (!el) return;
     if (el.value !== undefined || el.tagName === "TEXTAREA") {
@@ -148,10 +147,8 @@
     const cfg = await getConfig();
     if (!cfg.enabled) return null;
 
-
     const relayed = await sendMessage("RECALL", { query, userId: cfg.userId });
     if (relayed && relayed.ok && relayed.data) return relayed.data;
-
 
     try {
       const resp = await fetch(`${cfg.apiBase}/memory/recall`, {
@@ -248,7 +245,6 @@
       isInjecting = false;
     }
   }
-
 
   function realSend() {
     sendInProgress = true;

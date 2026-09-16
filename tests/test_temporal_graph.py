@@ -21,7 +21,6 @@ import uuid
 
 USER = "test_temporal"
 
-
 def test_record_supersession():
     print("  Testing SUPERSEDES edge creation...")
 
@@ -41,23 +40,18 @@ def test_record_supersession():
     print("  ✅ SUPERSEDES edge created")
     return "old_job_id_" + old_id[:8], "new_job_id_" + new_id[:8]
 
-
 def test_supersession_chain(old_id: str, new_id: str):
     print("\n  Testing supersession chain retrieval...")
-
 
     chain = get_supersession_chain(new_id, user_id=USER)
     print(f"  Chain from new_id: {chain}")
 
-
     chain_old = get_supersession_chain(old_id, user_id=USER)
     print(f"  Chain from old_id: {chain_old}")
-
 
     all_chains = chain + chain_old
     assert len(all_chains) > 0, "Should find at least one supersession link"
     print(f"  ✅ Supersession chain has {len(all_chains)} link(s)")
-
 
 def test_multiple_supersessions():
     print("\n  Testing multi-hop temporal chain (NYC → London → Berlin)...")
@@ -83,7 +77,6 @@ def test_multiple_supersessions():
         user_id=USER,
     )
 
-
     london_chain = get_supersession_chain(london_id, user_id=USER)
     directions = {c["direction"] for c in london_chain}
     print(f"  London chain directions: {directions}")
@@ -92,19 +85,15 @@ def test_multiple_supersessions():
     print(f"  ✅ Multi-hop chain: NYC → London → Berlin recorded")
     return nyc_id, london_id, berlin_id
 
-
 def test_old_state_preserved(nyc_id: str):
     print("\n  Testing old state is preserved (not deleted)...")
-
 
     chain = get_supersession_chain(nyc_id, user_id=USER)
     print(f"  NYC chain: {chain}")
 
-
     has_successor = any(c["direction"] == "superseded_by" for c in chain)
 
     print(f"  ✅ Old state (NYC) still exists in graph with {len(chain)} link(s)")
-
 
 def test_graph_stats_includes_supersedes():
     print("\n  Testing graph stats include SUPERSEDES count...")
@@ -113,7 +102,6 @@ def test_graph_stats_includes_supersedes():
     assert "supersedes" in stats, "Stats should include supersedes count"
     assert stats["supersedes"] >= 2, f"Should have at least 2 SUPERSEDES edges, got {stats['supersedes']}"
     print(f"  ✅ Stats: {stats['supersedes']} SUPERSEDES edges, {stats['nodes']} nodes")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Immutable Temporal Graph Test\n")

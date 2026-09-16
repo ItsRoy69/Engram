@@ -12,7 +12,6 @@ def _find_env() -> str:
         return str(root_env)
     return str(backend_env)
 
-
 class Settings(BaseSettings):
 
     llm_provider: str = "gemini"
@@ -78,7 +77,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = _find_env()
         extra = "ignore"
-
 
 @lru_cache()
 def get_settings() -> Settings:

@@ -18,10 +18,8 @@ from config import get_settings
 
 settings = get_settings()
 
-
 def _pg_conn():
     return get_pg()
-
 
 def invalidate_memory(memory_id: str, reason: str = ""):
     """
@@ -61,7 +59,6 @@ def invalidate_memory(memory_id: str, reason: str = ""):
 
     print(f"[Engram] Superseded [{memory_id[:8]}]: {reason}")
 
-
 def find_conflicting(new_content: str, user_id: str = "default") -> list[dict]:
     """
     Find existing memories that are semantically close to the new fact.
@@ -96,7 +93,6 @@ def find_conflicting(new_content: str, user_id: str = "default") -> list[dict]:
         for r in results
         if r.score > 0.5
     ]
-
 
 def resolve(
     new_content:   str,

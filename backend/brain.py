@@ -32,7 +32,6 @@ settings = get_settings()
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
-
 def remember(content: str, user_id: str = "default", tags: list[str] = [], history: list[dict] = []) -> dict:
     """
     Full store pipeline.
@@ -119,7 +118,6 @@ def remember(content: str, user_id: str = "default", tags: list[str] = [], histo
 
     return result
 
-
 def recall(query: str, user_id: str = "default") -> dict:
     """
     Full recall pipeline.
@@ -185,7 +183,6 @@ def recall(query: str, user_id: str = "default") -> dict:
         "total_found":    len(candidates),
         "context_tokens": total_tokens,
     }
-
 
 def chat(message: str, user_id: str = "default", history: list[dict] = []) -> str:
     """

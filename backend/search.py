@@ -20,7 +20,6 @@ settings = get_settings()
 
 SPARSE_FIELD = "text_sparse"
 
-
 def tokenize(text: str) -> list[str]:
     """
     Deterministic tokeniser shared by storage (memory.py) and search.
@@ -36,7 +35,6 @@ def tokenize(text: str) -> list[str]:
     text = text.lower()
     text = re.sub(r"[^\w\s]", " ", text)
     return [t for t in text.split() if t]
-
 
 def tokens_to_sparse_vector(tokens: list[str]) -> SparseVector:
     """
@@ -56,7 +54,6 @@ def tokens_to_sparse_vector(tokens: list[str]) -> SparseVector:
         indices=list(tf.keys()),
         values=[v / total for v in tf.values()],
     )
-
 
 def _vector_search(query: str, user_id: str, top_k: int) -> list[dict]:
     """Dense cosine-similarity search via Qdrant."""
@@ -86,7 +83,6 @@ def _vector_search(query: str, user_id: str, top_k: int) -> list[dict]:
         }
         for r in results
     ]
-
 
 def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
     """
@@ -131,7 +127,6 @@ def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
 
     contents = [d["content"] for d in all_docs]
     return contents, all_docs
-
 
 def _bm25_search(query: str, user_id: str, top_k: int) -> list[dict]:
     """
@@ -189,7 +184,6 @@ def _bm25_search(query: str, user_id: str, top_k: int) -> list[dict]:
 
     return results
 
-
 def _rrf_merge(
     vector_results: list[dict],
     bm25_results:   list[dict],
@@ -222,7 +216,6 @@ def _rrf_merge(
         {**all_items[mid], "rrf_score": round(scores[mid], 6)}
         for mid in sorted_ids
     ]
-
 
 def hybrid_search(query: str, user_id: str = "default", top_k: int = None) -> list[dict]:
     """

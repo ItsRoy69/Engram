@@ -22,7 +22,6 @@ from config import get_settings
 
 settings = get_settings()
 
-
 def get_provider() -> str:
     return os.getenv("LLM_PROVIDER", "gemini").lower().strip()
 
@@ -38,7 +37,6 @@ def get_model() -> str:
     }
     return defaults.get(get_provider(), "gemini-3-flash-preview")
 
-
 def _gemini_complete(system: str, user: str) -> str:
     import google.generativeai as genai
     api_key = os.getenv("GEMINI_API_KEY", getattr(settings, "gemini_api_key", ""))
@@ -49,7 +47,6 @@ def _gemini_complete(system: str, user: str) -> str:
     )
     response = model.generate_content(user)
     return response.text.strip()
-
 
 def _gemini_chat(system: str, history: list[dict], message: str) -> str:
     import google.generativeai as genai
@@ -67,7 +64,6 @@ def _gemini_chat(system: str, history: list[dict], message: str) -> str:
     response = session.send_message(message)
     return response.text.strip()
 
-
 def _openai_complete(system: str, user: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -80,7 +76,6 @@ def _openai_complete(system: str, user: str) -> str:
         max_tokens=2048,
     )
     return resp.choices[0].message.content.strip()
-
 
 def _openai_chat(system: str, history: list[dict], message: str) -> str:
     from openai import OpenAI
@@ -98,7 +93,6 @@ def _openai_chat(system: str, history: list[dict], message: str) -> str:
     )
     return resp.choices[0].message.content.strip()
 
-
 def _anthropic_complete(system: str, user: str) -> str:
     import anthropic
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -109,7 +103,6 @@ def _anthropic_complete(system: str, user: str) -> str:
         messages=[{"role": "user", "content": user}],
     )
     return resp.content[0].text.strip()
-
 
 def _anthropic_chat(system: str, history: list[dict], message: str) -> str:
     import anthropic
@@ -127,7 +120,6 @@ def _anthropic_chat(system: str, history: list[dict], message: str) -> str:
     )
     return resp.content[0].text.strip()
 
-
 def _deepseek_complete(system: str, user: str) -> str:
     from openai import OpenAI
     client = OpenAI(
@@ -143,7 +135,6 @@ def _deepseek_complete(system: str, user: str) -> str:
         max_tokens=2048,
     )
     return resp.choices[0].message.content.strip()
-
 
 def _deepseek_chat(system: str, history: list[dict], message: str) -> str:
     from openai import OpenAI
@@ -163,7 +154,6 @@ def _deepseek_chat(system: str, history: list[dict], message: str) -> str:
     )
     return resp.choices[0].message.content.strip()
 
-
 _COMPLETE = {
     "gemini":    _gemini_complete,
     "openai":    _openai_complete,
@@ -178,7 +168,6 @@ _CHAT = {
     "deepseek":  _deepseek_chat,
 }
 
-
 def complete(system: str, user: str) -> str:
     """
     Single-turn LLM call. Used by extractor, HyDE, graph classifier.
@@ -191,7 +180,6 @@ def complete(system: str, user: str) -> str:
                          f"Set LLM_PROVIDER to one of: gemini, openai, anthropic, deepseek")
     return fn(system, user)
 
-
 def chat_complete(system: str, history: list[dict], message: str) -> str:
     """
     Multi-turn chat. Used by brain.chat().
@@ -202,7 +190,6 @@ def chat_complete(system: str, history: list[dict], message: str) -> str:
     if not fn:
         raise ValueError(f"Unknown LLM provider: '{provider}'.")
     return fn(system, history, message)
-
 
 def provider_info() -> dict:
     """Returns current provider and model — used by /health endpoint."""

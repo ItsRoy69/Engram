@@ -23,12 +23,10 @@ settings = get_settings()
 
 GRAPH_NAME = "engram"
 
-
-UPDATES    = "UPDATES"    
-EXTENDS    = "EXTENDS"    
-DERIVES    = "DERIVES"    
-SUPERSEDES = "SUPERSEDES" 
-
+UPDATES    = "UPDATES"
+EXTENDS    = "EXTENDS"
+DERIVES    = "DERIVES"
+SUPERSEDES = "SUPERSEDES"
 
 CLASSIFY_PROMPT = """You are a memory graph classifier for a personal AI memory system.
 
@@ -49,16 +47,13 @@ Return ONLY valid JSON, no markdown:
   "reason": "one sentence explanation"
 }"""
 
-
 def _get_graph():
     """Connect to FalkorDB and return the engram graph handle."""
     db = FalkorDB(host=settings.falkordb_host, port=settings.falkordb_port)
     return db.select_graph(GRAPH_NAME)
 
-
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 def ensure_node(memory_id: str, user_id: str = "default", tcommit: str = None) -> bool:
     """
@@ -82,7 +77,6 @@ def ensure_node(memory_id: str, user_id: str = "default", tcommit: str = None) -
         print(f"[Engram:Graph] ensure_node failed: {e}")
         return False
 
-
 def _classify_relationship(old_content: str, new_content: str) -> dict:
     """
     Ask the LLM to classify the relationship between two memory facts.
@@ -105,7 +99,6 @@ def _classify_relationship(old_content: str, new_content: str) -> dict:
         print(f"[Engram:Graph] Classification failed: {e}")
         return {"relationship": "NONE", "confidence": 0.0, "reason": str(e)}
 
-
 def _would_create_cycle(from_id: str, to_id: str) -> bool:
     """Check if adding from_id → to_id would create a cycle."""
     try:
@@ -120,7 +113,6 @@ def _would_create_cycle(from_id: str, to_id: str) -> bool:
     except Exception as e:
         print(f"[Engram:Graph] Cycle check failed (allowing edge): {e}")
     return False
-
 
 def _community_check_passed(from_id: str, to_id: str, user_id: str) -> bool:
     """Guard: no cycle, both nodes belong to the same user."""
@@ -142,7 +134,6 @@ def _community_check_passed(from_id: str, to_id: str, user_id: str) -> bool:
         return False
     return True
 
-
 def _create_edge(from_id: str, to_id: str, rel_type: str, confidence: float, reason: str):
     """Create a directed typed relationship."""
     g = _get_graph()
@@ -162,7 +153,6 @@ def _create_edge(from_id: str, to_id: str, rel_type: str, confidence: float, rea
         f"[Engram:Graph] Edge [{rel_type}] {from_id[:8]} → {to_id[:8]} "
         f"(conf={confidence:.2f}): {reason[:60]}"
     )
-
 
 def record_supersession(
     old_memory_id:  str,
@@ -226,7 +216,6 @@ def record_supersession(
         print(f"[Engram:Graph] record_supersession failed (non-critical): {e}")
         return False
 
-
 def get_history(memory_id: str, user_id: str = "default") -> list[dict]:
     """
     Traverse SUPERSEDES edges to return the full temporal history
@@ -247,7 +236,6 @@ def get_history(memory_id: str, user_id: str = "default") -> list[dict]:
     """
     try:
         g = _get_graph()
-
 
         result = g.ro_query(
             "MATCH path = (oldest:Memory)-[:SUPERSEDES*0..20]->(m:Memory {id: $id}) "
@@ -279,7 +267,6 @@ def get_history(memory_id: str, user_id: str = "default") -> list[dict]:
     except Exception as e:
         print(f"[Engram:Graph] get_history failed: {e}")
         return []
-
 
 def get_supersession_chain(memory_id: str, user_id: str = "default") -> list[dict]:
     """
@@ -324,7 +311,6 @@ def get_supersession_chain(memory_id: str, user_id: str = "default") -> list[dic
     except Exception as e:
         print(f"[Engram:Graph] get_supersession_chain failed: {e}")
         return []
-
 
 def link_memories(
     new_memory_id:    str,
@@ -391,7 +377,6 @@ def link_memories(
 
     return edges_created
 
-
 def get_related(memory_id: str, user_id: str = "default", depth: int = 2) -> list:
     """
     Traverse the graph to find memories related to memory_id.
@@ -435,7 +420,6 @@ def get_related(memory_id: str, user_id: str = "default", depth: int = 2) -> lis
         print(f"[Engram:Graph] get_related failed: {e}")
         return []
 
-
 def invalidate_edges(memory_id: str):
     """
     When a memory is superseded, mark its outgoing UPDATES edges inactive.
@@ -456,7 +440,6 @@ def invalidate_edges(memory_id: str):
                 print(f"[Engram:Graph] Marked {count} UPDATES edge(s) inactive for {memory_id[:8]}")
     except Exception as e:
         print(f"[Engram:Graph] invalidate_edges failed (non-critical): {e}")
-
 
 def get_graph_stats(user_id: str = "default") -> dict:
     """Node/edge counts per user. Used by health checks and dashboard."""

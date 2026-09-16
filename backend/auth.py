@@ -33,16 +33,13 @@ bearer = HTTPBearer(auto_error=False)
 
 _limiter = Limiter(key_func=get_remote_address)
 
-
-ACCESS_TOKEN_TTL  = 60 * 15          
-REFRESH_TOKEN_TTL = 60 * 60 * 24 * 30  
+ACCESS_TOKEN_TTL  = 60 * 15
+REFRESH_TOKEN_TTL = 60 * 60 * 24 * 30
 
 SECRET = os.getenv("AUTH_SECRET", "engram-change-this-secret-in-production")
 
-
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
-
 
 def _sign(payload: dict) -> str:
     header = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
@@ -51,7 +48,6 @@ def _sign(payload: dict) -> str:
         hmac.new(SECRET.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest()
     )
     return f"{header}.{body}.{sig}"
-
 
 def _verify(token: str) -> dict:
     try:
@@ -69,7 +65,6 @@ def _verify(token: str) -> dict:
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
-
 def _create_access_token(user_id: str, email: str, username: str) -> str:
     return _sign({
         "sub":      user_id,
@@ -79,7 +74,6 @@ def _create_access_token(user_id: str, email: str, username: str) -> str:
         "iat":      int(time.time()),
         "exp":      int(time.time()) + ACCESS_TOKEN_TTL,
     })
-
 
 def _create_refresh_token(user_id: str) -> str:
     """
@@ -103,7 +97,6 @@ def _create_refresh_token(user_id: str) -> str:
     cur.close(); conn.close()
 
     return raw_token
-
 
 def _validate_refresh_token(raw_token: str) -> dict:
     """
@@ -146,7 +139,6 @@ def _validate_refresh_token(raw_token: str) -> dict:
         "username": username,
     }
 
-
 def _revoke_refresh_token(raw_token: str) -> bool:
     """Mark a refresh token as revoked. Returns True if found."""
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
@@ -161,12 +153,10 @@ def _revoke_refresh_token(raw_token: str) -> bool:
     cur.close(); conn.close()
     return affected > 0
 
-
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
     key  = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
     return base64.b64encode(salt + key).decode()
-
 
 def verify_password(password: str, stored: str) -> bool:
     raw  = base64.b64decode(stored.encode())
@@ -177,10 +167,8 @@ def verify_password(password: str, stored: str) -> bool:
         hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
     )
 
-
 def _pg():
     return get_pg()
-
 
 def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
     if not creds:
@@ -191,7 +179,6 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> d
         )
     return _verify(creds.credentials)
 
-
 def get_optional_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict | None:
     if not creds:
         return None
@@ -200,17 +187,14 @@ def get_optional_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> 
     except Exception:
         return None
 
-
 class RegisterRequest(BaseModel):
     email:    str = Field(..., description="Email address")
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=8)
 
-
 class LoginRequest(BaseModel):
     email:    str
     password: str
-
 
 class AuthResponse(BaseModel):
     access_token:  str
@@ -219,24 +203,19 @@ class AuthResponse(BaseModel):
     email:         str
     username:      str
 
-
 class RefreshRequest(BaseModel):
     refresh_token: str
-
 
 class AccessTokenResponse(BaseModel):
     access_token: str
 
-
 class LogoutRequest(BaseModel):
     refresh_token: str
-
 
 class MeResponse(BaseModel):
     user_id:  str
     email:    str
     username: str
-
 
 @router.post("/register", response_model=AuthResponse, status_code=201)
 @_limiter.limit("5/hour")
@@ -271,7 +250,6 @@ def register(req: RegisterRequest, request: Request):
         access_token=access_token, refresh_token=refresh_token,
         user_id=user_id, email=email, username=uname,
     )
-
 
 @router.post("/login", response_model=AuthResponse)
 @_limiter.limit("10/minute")
@@ -314,7 +292,6 @@ def login(req: LoginRequest, request: Request):
         user_id=str(user_id), email=email, username=username,
     )
 
-
 @router.post("/refresh", response_model=AccessTokenResponse)
 @_limiter.limit("30/minute")
 def refresh(req: RefreshRequest, request: Request):
@@ -331,7 +308,6 @@ def refresh(req: RefreshRequest, request: Request):
     )
     return AccessTokenResponse(access_token=access_token)
 
-
 @router.post("/logout", status_code=200)
 def logout(req: LogoutRequest):
     """
@@ -343,7 +319,6 @@ def logout(req: LogoutRequest):
     if not found:
         raise HTTPException(404, "Refresh token not found")
     return {"status": "logged out"}
-
 
 @router.get("/me", response_model=MeResponse)
 def me(current_user: dict = Depends(get_current_user)):

@@ -35,7 +35,6 @@ Rules:
 
 Return ONLY the enriched text — no explanation, no JSON, no markdown."""
 
-
 EXTRACT_PROMPT = """You are a fact extractor for a personal AI memory system.
 
 Given input text, extract every distinct, atomic fact. Rules:
@@ -78,12 +77,10 @@ Return ONLY valid JSON, no markdown:
   ]
 }"""
 
-
 def _call_llm(system: str, user_message: str) -> dict:
     raw = complete(system=system, user=user_message)
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
-
 
 def enrich_with_context(chunk: str, history: list[dict]) -> str:
     """
@@ -142,7 +139,6 @@ def enrich_with_context(chunk: str, history: list[dict]) -> str:
         print(f"[Engram:Enrich] Failed (using raw chunk): {e}")
         return chunk
 
-
 def extract(text: str, history: list[dict] | None = None) -> list[dict]:
     """
     Extract atomic facts from raw text.
@@ -155,7 +151,6 @@ def extract(text: str, history: list[dict] | None = None) -> list[dict]:
     """
 
     enriched_text = enrich_with_context(text, history or [])
-
 
     try:
         data = _call_llm(EXTRACT_PROMPT, f"Extract facts from:\n\n{enriched_text}")
@@ -178,7 +173,6 @@ def extract(text: str, history: list[dict] | None = None) -> list[dict]:
         print(f"[Engram] Validation pass failed, using pass 1 results: {e}")
 
     return facts
-
 
 def check_contradiction(new_fact: str, existing_fact: str) -> tuple[bool, str]:
     """

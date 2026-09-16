@@ -10,7 +10,6 @@ from search import hybrid_search
 
 USER = "test_search"
 
-
 def test_hybrid_search():
 
     print("  Storing test memories...")
@@ -43,7 +42,6 @@ def test_hybrid_search():
     all_results = hybrid_search("backend team API", user_id=USER, top_k=3)
     for i, r in enumerate(all_results, 1):
         print(f"  {i}. [{r['rrf_score']}] {r['content'][:60]}")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Hybrid Search Test\n")

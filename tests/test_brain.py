@@ -10,7 +10,6 @@ from brain import remember, recall, chat
 
 USER = "test_brain"
 
-
 def test_remember():
     print("  Testing remember() — full store pipeline...")
     result = remember(
@@ -26,7 +25,6 @@ def test_remember():
     assert result["stored"] > 0, "Should store at least 1 fact"
     print("  ✅ remember() working")
 
-
 def test_recall():
     print("\n  Testing recall() — full retrieval pipeline...")
     result = recall("what naming convention do we use for APIs?", user_id=USER)
@@ -37,7 +35,6 @@ def test_recall():
     assert len(result["memories"]) > 0, "Should recall at least 1 memory"
     print("  ✅ recall() working")
 
-
 def test_chat():
     print("\n  Testing chat() — memory-augmented response...")
     response = chat("What naming convention did we agree on for APIs?", user_id=USER)
@@ -46,7 +43,6 @@ def test_chat():
     assert "camelCase" in response or "camel" in response.lower(), \
         f"Response should mention camelCase, got: {response}"
     print("  ✅ chat() working — memory injected correctly")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Full Pipeline Test\n")

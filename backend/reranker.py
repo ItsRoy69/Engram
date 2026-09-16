@@ -10,14 +10,12 @@ from config import get_settings
 
 settings = get_settings()
 
-
 @lru_cache()
 def _load_reranker(model_name: str) -> CrossEncoder:
     print(f"[Engram] Loading reranker: {model_name} ...")
     model = CrossEncoder(model_name)
     print(f"[Engram] Reranker ready.")
     return model
-
 
 def rerank(query: str, candidates: list[dict], top_k: int = None) -> list[dict]:
     """
@@ -33,14 +31,11 @@ def rerank(query: str, candidates: list[dict], top_k: int = None) -> list[dict]:
 
     model = _load_reranker(settings.reranker_model)
 
-
     pairs = [(query, c["content"]) for c in candidates]
     scores = model.predict(pairs)
 
-
     for i, candidate in enumerate(candidates):
         candidate["rerank_score"] = round(float(scores[i]), 4)
-
 
     reranked = sorted(candidates, key=lambda x: x["rerank_score"], reverse=True)
 

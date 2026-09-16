@@ -9,12 +9,11 @@ settings = get_settings()
 
 HYDE_PROMPT = """You are helping retrieve memories from a personal AI knowledge base.
 
-Given a search query, write a SHORT hypothetical memory (2-3 sentences) that would 
+Given a search query, write a SHORT hypothetical memory (2-3 sentences) that would
 perfectly answer this query if it existed in the memory store.
 
 Write it as if it IS a stored memory — factual, specific, past tense.
 Do NOT add disclaimers or say "hypothetically". Just write the memory directly."""
-
 
 def expand(query: str) -> str:
     """

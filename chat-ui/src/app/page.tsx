@@ -359,7 +359,6 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Onboarding modal */}
       {showOb&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}
           onClick={e=>{if(e.target===e.currentTarget)setShowOb(false);}}>

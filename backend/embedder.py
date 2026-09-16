@@ -5,7 +5,6 @@ from sentence_transformers import SentenceTransformer
 from functools import lru_cache
 import numpy as np
 
-
 @lru_cache()
 def _load_model(model_name: str) -> SentenceTransformer:
     """Load model once, reuse forever."""
@@ -13,7 +12,6 @@ def _load_model(model_name: str) -> SentenceTransformer:
     model = SentenceTransformer(model_name)
     print(f"[Engram] Embedding model ready.")
     return model
-
 
 class Embedder:
 
@@ -38,6 +36,5 @@ class Embedder:
         a = np.array(v1)
         b = np.array(v2)
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10))
-
 
 embedder = Embedder()

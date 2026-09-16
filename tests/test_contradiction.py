@@ -10,7 +10,6 @@ from contradiction import resolve, find_conflicting
 
 USER = "test_contradiction"
 
-
 def test_contradiction_resolution():
 
     print("  Storing original fact...")
@@ -37,14 +36,12 @@ def test_contradiction_resolution():
     assert not john_still_there, f"John's old fact should be invalidated, but got: {[r['content'] for r in results]}"
     print(f"  ✅ Old fact gone — top result: '{results[0]['content']}'")
 
-
 def test_no_false_positives():
     print("\n  Testing no false positives...")
     store("We use PostgreSQL as our database", user_id=USER)
     found, _ = resolve("Deployment happens every Friday", user_id=USER)
     assert not found, "Unrelated fact should not trigger contradiction"
     print("  ✅ Unrelated fact — no false contradiction")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Contradiction Resolution Test\n")

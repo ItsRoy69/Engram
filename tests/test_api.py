@@ -17,7 +17,6 @@ import urllib.error
 BASE = "http://localhost:8000"
 USER = "test_api_" + uuid.uuid4().hex[:8]
 
-
 def request(method: str, path: str, body: dict = None) -> tuple[int, dict]:
     url = BASE + path
     data = json.dumps(body).encode() if body else None
@@ -33,14 +32,12 @@ def request(method: str, path: str, body: dict = None) -> tuple[int, dict]:
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read())
 
-
 def test_health():
     print("  GET /health ...")
     status, body = request("GET", "/health")
     assert status == 200, f"Expected 200, got {status}: {body}"
     assert body["status"] == "ok"
     print(f"  ✅ /health ok — graph nodes: {body['graph']['nodes']}")
-
 
 def test_store():
     print("\n  POST /memory/store ...")
@@ -55,7 +52,6 @@ def test_store():
     for f in body["facts"]:
         print(f"    → {f[:70]}")
 
-
 def test_recall():
     print("\n  POST /memory/recall ...")
     status, body = request("POST", "/memory/recall", {
@@ -68,7 +64,6 @@ def test_recall():
     print(f"  ✅ /memory/recall — found: {body['total_found']}, tokens: {body['context_tokens']}")
     print(f"    Top result: {top['content'][:70]}")
 
-
 def test_list():
     print("\n  GET /memory/list/{user_id} ...")
     status, body = request("GET", f"/memory/list/{USER}")
@@ -76,7 +71,6 @@ def test_list():
     assert len(body) > 0, "Should return stored memories"
     print(f"  ✅ /memory/list — returned {len(body)} memories")
     print(f"    First: {body[0]['content'][:60]}")
-
 
 def test_delete():
     print("\n  DELETE /memory/{memory_id} ...")
@@ -94,7 +88,6 @@ def test_delete():
     assert target_id not in ids_after, "Deleted memory should not appear in list"
     print(f"  ✅ Confirmed removed from list")
 
-
 def test_chat():
     print("\n  POST /chat ...")
     status, body = request("POST", "/chat", {
@@ -108,7 +101,6 @@ def test_chat():
     print(f"  ✅ /chat — memories_used: {body['memories_used']}")
     print(f"    Response: {body['response'][:120]}")
 
-
 def test_validation():
     print("\n  Input validation ...")
     status, _ = request("POST", "/memory/store", {"content": "  ", "user_id": USER})
@@ -117,7 +109,6 @@ def test_validation():
     status, _ = request("POST", "/memory/recall", {"query": "", "user_id": USER})
     assert status == 400, f"Empty query should return 400, got {status}"
     print("  ✅ Validation working")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — API Test\n")

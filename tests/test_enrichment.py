@@ -10,7 +10,6 @@ sys.path.append("backend")
 
 from extractor import enrich_with_context
 
-
 def test_pronoun_resolution():
     print("  Testing pronoun resolution...")
 
@@ -25,7 +24,6 @@ def test_pronoun_resolution():
     assert "He" not in enriched or "John" in enriched
     print(f"  ✅ '{chunk}' → '{enriched}'")
 
-
 def test_vague_reference_resolution():
     print("\n  Testing vague reference resolution...")
 
@@ -38,8 +36,7 @@ def test_vague_reference_resolution():
     enriched = enrich_with_context(chunk, history)
 
     print(f"  ✅ '{chunk}' → '{enriched}'")
-    assert chunk != enriched or "framework" in enriched 
-
+    assert chunk != enriched or "framework" in enriched
 
 def test_already_self_contained():
     print("\n  Testing self-contained chunk is unchanged...")
@@ -54,7 +51,6 @@ def test_already_self_contained():
     assert "Alice" in enriched
     assert "frontend" in enriched
 
-
 def test_no_history_passthrough():
     print("\n  Testing empty history returns chunk unchanged...")
 
@@ -62,7 +58,6 @@ def test_no_history_passthrough():
     enriched = enrich_with_context(chunk, [])
     assert enriched == chunk, f"Empty history should return chunk as-is, got: '{enriched}'"
     print(f"  ✅ No history → passthrough")
-
 
 def test_disabled_via_config():
     print("\n  Testing lookback=0 disables enrichment...")
@@ -77,7 +72,6 @@ def test_disabled_via_config():
     print(f"  ✅ lookback=0 → passthrough")
 
     extractor.settings.sliding_window_lookback = original
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Sliding Window Coreference Test\n")

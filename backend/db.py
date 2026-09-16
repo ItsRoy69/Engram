@@ -47,7 +47,6 @@ from config import get_settings
 
 settings = get_settings()
 
-
 def get_pg() -> psycopg2.extensions.connection:
     """
     Returns a psycopg2 connection.
@@ -74,7 +73,6 @@ def get_pg() -> psycopg2.extensions.connection:
         password=settings.postgres_password,
     )
 
-
 def get_qdrant() -> QdrantClient:
     """
     Returns a QdrantClient.
@@ -93,7 +91,6 @@ def get_qdrant() -> QdrantClient:
         return QdrantClient(url=qdrant_url, api_key=qdrant_api_key or None)
 
     return QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
-
 
 def get_redis() -> redis_lib.Redis:
     """

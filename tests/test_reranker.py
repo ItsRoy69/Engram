@@ -11,7 +11,6 @@ from reranker import rerank
 
 USER = "test_reranker"
 
-
 def test_reranker():
 
     print("  Storing test memories...")
@@ -36,7 +35,6 @@ def test_reranker():
     for i, r in enumerate(reranked, 1):
         print(f"    {i}. [rerank:{r['rerank_score']}] {r['content'][:55]}")
 
-
     top_content = reranked[0]["content"].lower()
     assert "api" in top_content or "camel" in top_content, \
         f"Top reranked result should be API-related, got: {reranked[0]['content']}"
@@ -48,7 +46,6 @@ def test_reranker():
     print(f"  Hybrid top:  '{hybrid_top[:55]}'")
     print(f"  Rerank top:  '{rerank_top[:55]}'")
     print(f"  ✅ Reranker applied successfully")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — BGE Reranker Test\n")

@@ -7,7 +7,6 @@ sys.path.append("backend")
 
 from extractor import extract, check_contradiction
 
-
 def test_extraction():
     print("  Testing basic extraction...")
     facts = extract("Had a team meeting today. John will lead the backend. We agreed the API should use camelCase. Deadline is next Friday.")
@@ -16,7 +15,6 @@ def test_extraction():
     for f in facts:
         temp = "⏰" if f["is_temporary"] else "📌"
         print(f"     {temp} [{f['confidence']:.2f}] {f['content']}")
-
 
 def test_negation():
     print("\n  Testing negation handling (critical edge case)...")
@@ -28,7 +26,6 @@ def test_negation():
     print(f"  ✅ Negation preserved correctly")
     for f in facts:
         print(f"     📌 {f['content']}")
-
 
 def test_contradiction():
     print("\n  Testing contradiction detection (per-fact, not batch)...")
@@ -53,7 +50,6 @@ def test_contradiction():
     )
     assert not is_contra3, "Adding detail should NOT contradict the original"
     print(f"  ✅ Additive detail correctly ignored")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Fact Extractor Test\n")

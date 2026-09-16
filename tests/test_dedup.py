@@ -10,7 +10,6 @@ from dedup import is_duplicate
 
 USER = "test_dedup"
 
-
 def test_dedup():
     print("  Storing original memory...")
     store("Team decided API responses should use camelCase", user_id=USER)
@@ -29,7 +28,6 @@ def test_dedup():
     dup, match, score = is_duplicate("I love hiking in the mountains on weekends", user_id=USER)
     assert not dup, f"Unrelated content should NOT be flagged (score: {score})"
     print(f"  ✅ Unrelated content ignored — score: {score}")
-
 
 if __name__ == "__main__":
     print("\n🧠 Engram — Duplicate Detection Test\n")

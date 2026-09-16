@@ -18,7 +18,6 @@ import os
 import re
 sys.path.insert(0, os.path.dirname(__file__))
 
-
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -62,10 +61,8 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-
 from fastapi.responses import Response
 from starlette.types import ASGIApp, Scope, Receive, Send
-
 
 class ExtensionCORSMiddleware:
     ALLOWED_CHAT_ORIGINS = {"https://chatgpt.com", "https://claude.ai"}
@@ -122,9 +119,7 @@ class ExtensionCORSMiddleware:
 
 app.add_middleware(ExtensionCORSMiddleware)
 
-
 app.include_router(auth_router)
-
 
 class EngramError(Exception):
     """Structured error with HTTP status and clean user message."""
@@ -133,7 +128,6 @@ class EngramError(Exception):
         self.message = message
         self.detail = detail
         super().__init__(message)
-
 
 def classify_error(e: Exception) -> EngramError:
     """
@@ -215,7 +209,6 @@ def classify_error(e: Exception) -> EngramError:
 
     return EngramError(500, f"An unexpected error occurred: {raw[:200]}", "INTERNAL_ERROR")
 
-
 @app.exception_handler(EngramError)
 async def engram_error_handler(request: Request, exc: EngramError):
     return JSONResponse(
@@ -227,12 +220,10 @@ async def engram_error_handler(request: Request, exc: EngramError):
         }
     )
 
-
 def handle(e: Exception) -> None:
     """Classify and raise as EngramError. Call from every except block."""
     err = classify_error(e)
     raise err
-
 
 class StoreRequest(BaseModel):
     content: str = Field(..., description="Raw text to store as memories")
@@ -247,7 +238,6 @@ class StoreRequest(BaseModel):
         )
     )
 
-
 class StoreResponse(BaseModel):
     stored: int
     skipped_duplicates: int
@@ -255,11 +245,9 @@ class StoreResponse(BaseModel):
     graph_edges: int
     facts: list[str]
 
-
 class RecallRequest(BaseModel):
     query: str = Field(..., description="Natural language query")
     user_id: str = Field("default")
-
 
 class MemoryItem(BaseModel):
     id: str
@@ -270,24 +258,20 @@ class MemoryItem(BaseModel):
     created_at: Optional[str] = None
     graph_rel: Optional[str] = None
 
-
 class RecallResponse(BaseModel):
     query: str
     memories: list[MemoryItem]
     total_found: int
     context_tokens: int
 
-
 class ChatRequest(BaseModel):
     message: str = Field(..., description="User message")
     user_id: str = Field("default")
     history: list[dict] = Field(default_factory=list)
 
-
 class ChatResponse(BaseModel):
     response: str
     memories_used: int
-
 
 class MemoryListItem(BaseModel):
     id: str
@@ -297,13 +281,11 @@ class MemoryListItem(BaseModel):
     is_valid: bool = True
     is_latest: bool = True
 
-
 class HealthResponse(BaseModel):
     status: str
     timestamp: str
     model: str
     graph: dict
-
 
 @app.post("/memory/store", response_model=StoreResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.rate_limit_store)
@@ -318,7 +300,6 @@ def store_memory(req: StoreRequest, request: Request, current_user: dict = Depen
         raise
     except Exception as e:
         handle(e)
-
 
 @app.post("/memory/recall", response_model=RecallResponse)
 @limiter.limit(settings.rate_limit_recall)
@@ -339,7 +320,6 @@ def recall_memories(req: RecallRequest, request: Request, current_user: dict = D
         raise
     except Exception as e:
         handle(e)
-
 
 def _store_conversation_turn(user_message: str, assistant_response: str, user_id: str, history: list[dict]) -> None:
     """
@@ -364,7 +344,6 @@ def _store_conversation_turn(user_message: str, assistant_response: str, user_id
     except Exception as e:
         print(f"[Engram] Background turn store failed (non-critical): {e}")
 
-
 @app.post("/chat", response_model=ChatResponse)
 @limiter.limit(settings.rate_limit_chat)
 def chat(
@@ -380,10 +359,8 @@ def chat(
 
         user_id = current_user["sub"] if current_user else req.user_id
 
-
         recall_result = brain.recall(req.message, user_id=user_id)
         memories_used = len(recall_result["memories"])
-
 
         response_text = brain.chat(
             req.message,
@@ -391,9 +368,7 @@ def chat(
             history=req.history,
         )
 
-
         response_text = _pii.restore(response_text)
-
 
         background_tasks.add_task(
             _store_conversation_turn,
@@ -409,7 +384,6 @@ def chat(
         raise
     except Exception as e:
         handle(e)
-
 
 @app.get("/memory/list/{user_id}", response_model=list[MemoryListItem])
 @limiter.limit(settings.rate_limit_recall)
@@ -457,7 +431,6 @@ def list_memories(user_id: str, request: Request, limit: int = 50, current_user:
     except Exception as e:
         handle(e)
 
-
 @app.delete("/memory/{memory_id}", status_code=status.HTTP_200_OK)
 @limiter.limit(settings.rate_limit_store)
 def delete_memory(memory_id: str, request: Request):
@@ -468,7 +441,6 @@ def delete_memory(memory_id: str, request: Request):
         raise
     except Exception as e:
         handle(e)
-
 
 @app.get("/memory/{memory_id}/history")
 @limiter.limit(settings.rate_limit_recall)
@@ -491,7 +463,6 @@ def memory_history(memory_id: str, request: Request, current_user: dict = Depend
     except Exception as e:
         handle(e)
 
-
 @app.get("/memory/{memory_id}/chain")
 @limiter.limit(settings.rate_limit_recall)
 def memory_chain(memory_id: str, request: Request, current_user: dict = Depends(get_optional_user)):
@@ -511,7 +482,6 @@ def memory_chain(memory_id: str, request: Request, current_user: dict = Depends(
         raise
     except Exception as e:
         handle(e)
-
 
 @app.get("/health", response_model=HealthResponse)
 def health():

@@ -44,13 +44,12 @@ PERMANENT_PATTERNS = [
     r"\busually\b",
     r"\bgenerally\b",
     r"\btypically\b",
-    r"\bworks? at\b",       
-    r"\blives? in\b",       
-    r"\bborn in\b",        
-    r"\bgraduated\b",       
-    r"\bmarried\b",         
+    r"\bworks? at\b",
+    r"\blives? in\b",
+    r"\bborn in\b",
+    r"\bgraduated\b",
+    r"\bmarried\b",
 ]
-
 
 def get_expiry(content: str, is_temporary_hint: bool | None = None) -> datetime | None:
     """
@@ -72,29 +71,23 @@ def get_expiry(content: str, is_temporary_hint: bool | None = None) -> datetime 
     if is_temporary_hint is True:
         return _now() + timedelta(days=7)
     if is_temporary_hint is False:
-        return None  
-
+        return None
 
     text = content.lower()
-
 
     for pattern in PERMANENT_PATTERNS:
         if re.search(pattern, text):
             return None
 
-
     for pattern, delta in TIME_PATTERNS:
         if re.search(pattern, text):
             return _now() + delta
 
-
     return None
-
 
 def _now() -> datetime:
     """UTC now without tzinfo (consistent with existing storage format)."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
-
 
 def set_ttl(memory_id: str, expires_at: datetime):
     """
@@ -122,7 +115,6 @@ def set_ttl(memory_id: str, expires_at: datetime):
     pipe.execute()
     print(f"[Engram] TTL set [{memory_id[:8]}]: expires in {ttl_seconds}s ({expires_at.strftime('%Y-%m-%d %H:%M')} UTC)")
 
-
 def is_expired(memory_id: str) -> bool:
     """
     Check if a memory's TTL has expired.
@@ -138,25 +130,23 @@ def is_expired(memory_id: str) -> bool:
     r = get_redis()
     try:
         pipe = r.pipeline()
-        pipe.exists(f"ttl_set:{memory_id}")  
-        pipe.ttl(f"ttl:{memory_id}")           
+        pipe.exists(f"ttl_set:{memory_id}")
+        pipe.ttl(f"ttl:{memory_id}")
         ttl_set_exists, ttl = pipe.execute()
 
         if not ttl_set_exists:
-            return False  
+            return False
 
-        
         if ttl == -2:
-            return True    
+            return True
         if ttl == -1:
             return False
         if ttl > 0:
-            return False   
-        return True        
+            return False
+        return True
 
     except Exception:
-        return False  
-
+        return False
 
 def get_ttl_seconds(memory_id: str) -> int | None:
     """Get remaining TTL in seconds. Returns None if permanent or not set."""
