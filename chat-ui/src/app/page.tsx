@@ -211,7 +211,7 @@ export default function Home() {
                 }}/>
               </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 4px",marginBottom:6}}>
-                <span style={{fontSize:10,color:"var(--text-3)"}}>{filteredMems.length} memories</span>
+                  <span style={{fontSize:10,color:"var(--text-3)"}}>{memSearch?`${filteredMems.length} of ${memories.length} memories`:`${memories.length} memories`}</span>
                 <button onClick={loadMems} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text-3)",display:"flex",padding:2}}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={loadingMem?{animation:"spin 1.5s linear infinite"}:{}}>
                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>
@@ -318,9 +318,19 @@ export default function Home() {
                                dangerouslySetInnerHTML={{__html:`<p>${renderMd(msg.content)}</p>`}}/>
                            )}
                           {!msg.isThinking&&!msg.isError&&msg.memoriesUsed!==undefined&&msg.memoriesUsed>0&&(
-                            <span style={{display:"inline-block",marginTop:8,fontSize:10,color:"var(--text-3)",background:"var(--bg-3)",border:"1px solid var(--border)",padding:"2px 8px",borderRadius:99}}>
-                              {msg.memoriesUsed} memor{msg.memoriesUsed===1?"y":"ies"} used
-                            </span>
+                            <details style={{marginTop:8}}>
+                              <summary style={{fontSize:10,color:"var(--text-3)",cursor:"pointer",userSelect:"none"}}>
+                                {msg.memoriesUsed} memor{msg.memoriesUsed===1?"y":"ies"} used
+                              </summary>
+                              {/* Placeholder: the backend currently returns only the count
+                                  (memories_used). Per-memory ids are not surfaced yet, so we
+                                  can't list the specific memories here. No new endpoint is
+                                  added in this change; swap this note for the real list once
+                                  stream_chat_complete/chat return the recalled memory ids. */}
+                              <p style={{fontSize:10,color:"var(--text-3)",marginTop:6,lineHeight:1.6}}>
+                                Memory details are not returned by the backend yet — only the count above.
+                              </p>
+                            </details>
                           )}
                         </div>
                       </div>
