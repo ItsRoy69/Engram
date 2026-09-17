@@ -189,7 +189,7 @@ The extension automatically injects relevant memories before you send a message 
 | `POST` | `/memory/store` | Store content — full ingestion pipeline |
 | `POST` | `/memory/recall` | Retrieve memories — full retrieval pipeline |
 | `POST` | `/chat` | Memory-augmented chat |
-| `GET` | `/memory/list/{user_id}` | List all memories for a user |
+| `GET` | `/memory/list` | List all memories for the current user |
 | `DELETE` | `/memory/{memory_id}` | Soft-delete a memory |
 | `GET` | `/health` | Service health check |
 

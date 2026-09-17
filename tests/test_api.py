@@ -65,8 +65,8 @@ def test_recall():
     print(f"    Top result: {top['content'][:70]}")
 
 def test_list():
-    print("\n  GET /memory/list/{user_id} ...")
-    status, body = request("GET", f"/memory/list/{USER}")
+    print("\n  GET /memory/list ...")
+    status, body = request("GET", f"/memory/list?limit=50")
     assert status == 200, f"Expected 200, got {status}: {body}"
     assert len(body) > 0, "Should return stored memories"
     print(f"  ✅ /memory/list — returned {len(body)} memories")
@@ -74,7 +74,7 @@ def test_list():
 
 def test_delete():
     print("\n  DELETE /memory/{memory_id} ...")
-    _, memories = request("GET", f"/memory/list/{USER}")
+    _, memories = request("GET", f"/memory/list?limit=50")
     assert memories, "Need at least one memory to delete"
     target_id = memories[0]["id"]
 
@@ -83,7 +83,7 @@ def test_delete():
     assert body["status"] == "invalidated"
     print(f"  ✅ /memory/delete — invalidated {target_id[:12]}...")
 
-    _, after = request("GET", f"/memory/list/{USER}")
+    _, after = request("GET", f"/memory/list?limit=500")
     ids_after = {m["id"] for m in after}
     assert target_id not in ids_after, "Deleted memory should not appear in list"
     print(f"  ✅ Confirmed removed from list")

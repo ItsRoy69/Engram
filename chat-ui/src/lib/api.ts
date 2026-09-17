@@ -115,7 +115,7 @@ export const api = {
     request<ChatResult>("/chat", { method: "POST", body: JSON.stringify({ message, history }) }),
 
   list: (limit = 50) =>
-    request<Memory[]>(`/memory/list/${sessionUserId()}?limit=${limit}`),
+    request<Memory[]>(`/memory/list?limit=${limit}`),
 
   delete: (memoryId: string) =>
     request<{ memory_id: string; status: string }>(`/memory/${memoryId}`, { method: "DELETE" }),

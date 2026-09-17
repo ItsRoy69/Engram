@@ -8,7 +8,7 @@ All /memory and /chat endpoints require a valid bearer access token
   POST   /memory/store          — full ingestion pipeline (brain.remember)
   POST   /memory/recall         — full retrieval pipeline (brain.recall)
   POST   /chat                  — memory-augmented chat   (brain.chat)
-  GET    /memory/list/{user_id} — list all memories for a user
+  GET    /memory/list           — list all memories for the current user
   DELETE /memory/{memory_id}    — invalidate a memory (soft delete)
   GET    /health                — service health check
 
@@ -475,11 +475,10 @@ async def chat(
     except Exception as e:
         handle(e)
 
-@app.get("/memory/list/{user_id}", response_model=list[MemoryListItem])
+@app.get("/memory/list", response_model=list[MemoryListItem])
 @limiter.limit(settings.rate_limit_recall)
-def list_memories(user_id: str, request: Request, limit: int = 50, current_user: dict = Depends(get_current_user)):
-    if current_user["sub"] != user_id:
-        raise HTTPException(403, "Cannot access another user's memories")
+def list_memories(request: Request, limit: int = 50, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["sub"]
     limit = min(limit, 500)
     try:
         from db import get_qdrant
