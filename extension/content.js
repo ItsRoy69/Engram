@@ -280,7 +280,55 @@
     el._hideTimer = setTimeout(() => { el.style.opacity = "0"; }, 3000);
   }
 
-  async function injectMemories(inputEl) {
+  async function showMemoryToast(memories, injectedAt) {
+  const dup = document.getElementById("engram-toast");
+  if (dup) dup.remove();
+
+  const toast = document.createElement("div");
+  toast.id = "engram-toast";
+  Object.assign(toast.style, {
+    position: "fixed", right: "16px", bottom: "16px", zIndex: "2147483647",
+    background: "#12122a", color: "#e0e0ff", border: "1px solid #3a3a7e",
+    borderRadius: "10px", padding: "10px 14px", font: "12px/1.4 system-ui, sans-serif",
+    boxShadow: "0 6px 24px rgba(0,0,0,.5)", cursor: "pointer",
+    maxWidth: "320px", opacity: "0", transform: "translateY(8px)",
+    transition: "opacity .18s ease, transform .18s ease",
+  });
+  toast.textContent = `Engram: ${memories.length} memor${memories.length === 1 ? "y" : "ies"} added`;
+
+  const list = document.createElement("div");
+  list.style.cssText = "display:none;margin-top:8px;border-top:1px solid #3a3a7e;padding-top:8px;font-size:11px;color:#a0a0d0;max-height:180px;overflow:auto;";
+  memories.slice(0, 12).forEach((m, i) => {
+    const row = document.createElement("div");
+    const v = typeof m === "string" ? m : (m.text || m.content || JSON.stringify(m));
+    row.textContent = `- ${String(v).replace(/\s+/g, " ").slice(0, 120)}`;
+    row.style.marginBottom = "4px";
+    list.appendChild(row);
+  });
+  if (memories.length > 12) {
+    const more = document.createElement("div");
+    more.textContent = `… and ${memories.length - 12} more`;
+    more.style.color = "#7070c0";
+    list.appendChild(more);
+  }
+  toast.appendChild(listipse);
+  toast.addEventListener("click", () => {
+    list.style.display = list.style.display === "none" ? "block" : "none";
+  });
+
+  document.documentElement.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  });
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(8px)";
+    setTimeout(() => toast.remove(), 220);
+  }, 4000);
+}
+
+async function injectMemories(inputEl) {
     if (isInjecting) return;
     const raw = getInputText(inputEl).trim();
     const cleanQuery = raw.replace(ENGRA_MEMORY_RE, "").trim();
@@ -306,6 +354,7 @@
       lastInjectedMemoryBlock = memoryBlock;
       setInputText(inputEl, memoryBlock + cleanQuery);
       showIndicator(`${memories.length} memor${memories.length === 1 ? "y" : "ies"} injected`);
+      showMemoryToast(memories);
     } catch (e) {
       console.error("[Engram] inject error:", e);
       showIndicator("Engram error");

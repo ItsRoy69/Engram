@@ -4,8 +4,10 @@ const refreshInput = document.getElementById("refresh-token");
 const toggle       = document.getElementById("enabled-toggle");
 const saveBtn      = document.getElementById("save-btn");
 const saveMsg      = document.getElementById("save-msg");
-const statusDot    = document.getElementById("status-dot");
-const statusText   = document.getElementById("status-text");
+const statusDot  = document.getElementById("status-dot");
+const statusText = document.getElementById("status-text");
+const memoryCount = document.getElementById("memory-count");
+const testBtn   = document.getElementById("test-btn");
 
 const loginBtn     = document.getElementById("login-btn");
 const logoutBtn    = document.getElementById("logout-btn");
@@ -122,19 +124,34 @@ getSync().then((cfg) => {
 });
 
 async function checkHealth(base) {
+  const authed = (tokenInput.value || "").trim() !== "";
   try {
     const resp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
     if (resp.ok) {
-      statusDot.className   = "dot online";
-      statusText.textContent = "API online";
+      const data = await resp.json();
+      const graph = (data && data.graph) || {};
+      const n = typeof graph.nodes === "number" ? graph.nodes : null;
+      if (n != null) {
+        memoryCount.textContent = `Memories: ${n}`;
+        memoryCount.style.color  = "#40c080";
+      } else {
+        memoryCount.textContent = "Memories: -";
+        memoryCount.style.color  = "#6060aa";
+      }
+      statusDot.className    = authed ? "dot online" : "dot degraded";
+      statusText.textContent = authed ? "API online" : "API online - sign in below";
     } else {
       throw new Error();
     }
   } catch {
-    statusDot.className   = "dot offline";
-    statusText.textContent = "API offline — is uvicorn running?";
+    statusDot.className     = "dot offline";
+    statusText.textContent  = "API offline - is uvicorn running?";
+    memoryCount.textContent = "Memories: -";
+    memoryCount.style.color  = "#6060aa";
   }
 }
+
+
 
 saveBtn.addEventListener("click", () => {
   getSync().then((existing) => {
@@ -173,3 +190,5 @@ function showSaved() {
   saveMsg.textContent = "Synced ✓";
   setTimeout(() => { saveMsg.textContent = ""; }, 2000);
 }
+
+testBtn.addEventListener("click", () => checkHealth(baseUrl()));
