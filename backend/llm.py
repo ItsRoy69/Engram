@@ -17,6 +17,8 @@ Default models per provider (override with LLM_MODEL in .env):
 """
 
 import os
+import time
+import random
 from functools import lru_cache
 from config import get_settings
 
@@ -168,6 +170,76 @@ _CHAT = {
     "deepseek":  _deepseek_chat,
 }
 
+_MAX_RETRIES = 3
+
+def _is_transient(exc: BaseException) -> bool:
+    """Classify whether an LLM error is worth retrying.
+
+    Retry only when there's a plausible chance the next attempt succeeds:
+      • rate limits          (429 / ResourceExhausted)
+      • timeouts             (DeadlineExceeded, timeout errors)
+      • server errors        (5xx / InternalServerError / Unavailable)
+      • connection problems  (transient network blips)
+      • google api-core errors explicitly marked `.retryable`
+
+    Do NOT retry permanent failures — bad credentials, invalid requests,
+    and safety blocks won't fix themselves with another attempt:
+      • 4xx other than 408/409/429   (auth, forbidden, bad request, ...)
+      • google errors with `.retryable is False`  (incl. safety blocks)
+    """
+    # google.api_core exceptions carry an explicit, authoritative signal.
+    if hasattr(exc, "retryable"):
+        return bool(exc.retryable)
+
+    status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    if isinstance(status, int):
+        return status in (408, 409, 429) or 500 <= status < 600
+
+    name = type(exc).__name__
+    transient_names = {
+        "RateLimitError",          # openai / anthropic
+        "APITimeoutError",         # openai
+        "APIConnectionError",      # openai
+        "TimeoutError",            # builtin / anthropic
+        "ConnectionError",         # builtin
+        "InternalServerError",     # openai / deepseek
+        "ServiceUnavailableError", # openai
+        "ServerError",             # anthropic
+    }
+    if name in transient_names:
+        return True
+
+    # Anthropic / Gemini sometimes raise an APIStatusError subclass; check the
+    # status embedded in the message as a last resort.
+    import re
+    m = re.search(r"\b(429|50[0-9])\b", str(exc))
+    return m is not None
+
+def _wrap_retry(fn):
+    """Decorator: retry transient LLM errors up to _MAX_RETRIES times.
+
+    Exponential backoff (1s → 2s → ...) with ±50% jitter. Logs a warning
+    on each retry. Preserves the wrapped function's signature — public
+    `complete()` / `chat_complete()` args are unchanged.
+    """
+    @wraps(fn)
+    def _wrapped(*args, **kwargs):
+        attempt = 0
+        while True:
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                attempt += 1
+                if attempt >= _MAX_RETRIES or not _is_transient(e):
+                    raise
+                delay = (2 ** (attempt - 1)) * random.uniform(0.5, 1.5)
+                print(f"[Engram] LLM {fn.__name__} failed (transient: "
+                      f"{type(e).__name__}) — retry {attempt}/{_MAX_RETRIES - 1} "
+                      f"in {delay:.1f}s")
+                time.sleep(delay)
+    return _wrapped
+
+@_wrap_retry
 def complete(system: str, user: str) -> str:
     """
     Single-turn LLM call. Used by extractor, HyDE, graph classifier.
@@ -180,6 +252,7 @@ def complete(system: str, user: str) -> str:
                          f"Set LLM_PROVIDER to one of: gemini, openai, anthropic, deepseek")
     return fn(system, user)
 
+@_wrap_retry
 def chat_complete(system: str, history: list[dict], message: str) -> str:
     """
     Multi-turn chat. Used by brain.chat().
