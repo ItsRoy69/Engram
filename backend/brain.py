@@ -25,7 +25,7 @@ from search import hybrid_search
 from reranker import rerank
 from hyde import expand
 from graph import link_memories, get_related, invalidate_edges
-from llm import chat_complete
+from llm import chat_complete, stream_chat_complete
 from retention import init_retention, filter_by_retention
 from config import get_settings
 
@@ -257,3 +257,39 @@ async def chat(
     return await asyncio.to_thread(
         chat_complete, system_prompt, history, message
     )
+
+
+async def stream_chat(
+    message: str,
+    user_id: str = "default",
+    history: list[dict] = [],
+    memories: list[dict] | None = None,
+):
+    """Token-streaming memory-augmented chat (async generator).
+
+    Mirrors chat(): same recall pipeline + memory context + system prompt.
+    Yields answer tokens as they arrive instead of returning one string.
+    Falls back to a single non-streamed completion automatically.
+    """
+    if memories is None:
+        result = await recall(message, user_id=user_id)
+        memories = result["memories"]
+
+    if memories:
+        memory_context = "Relevant memories from your knowledge base:\n"
+        for i, m in enumerate(memories, 1):
+            memory_context += f"{i}. {m['content']}\n"
+        memory_context += "\n"
+    else:
+        memory_context = ""
+
+    system_prompt = (
+        "You are a personal AI assistant with access to the user's memory bank.\n"
+        f"{memory_context}"
+        "Use the memories above as context when answering. "
+        "If memories are not relevant, answer from general knowledge. "
+        "Be concise and helpful."
+    )
+
+    async for token in stream_chat_complete(system_prompt, history, message):
+        yield token

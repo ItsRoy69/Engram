@@ -31,7 +31,8 @@ for _stream in (sys.stdout, sys.stderr):
 
 from fastapi import FastAPI, HTTPException, Request, Depends, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+import json
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
@@ -474,6 +475,72 @@ async def chat(
         raise
     except Exception as e:
         handle(e)
+
+@app.post("/chat/stream")
+@limiter.limit(settings.rate_limit_chat)
+async def chat_stream(
+    req: ChatRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Chat with token-level streaming (SSE).
+
+    Same recall + memory-augmented pipeline as POST /chat, but each response
+    token is emitted as an SSE ``data:`` frame, JSON-encoded:
+        {"event":"start","memories_used":N}
+        {"event":"token","text":"<token>"}
+        {"event":"done","text":"<full response>"}
+    """
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="message cannot be empty")
+    if len(req.history) > settings.max_history_turns:
+        raise HTTPException(status_code=413, detail=f"history exceeds {settings.max_history_turns} turns")
+
+    async def event_stream():
+        try:
+            import pii as _pii
+
+            message = _normalize_content(req.message)
+            user_id = current_user["sub"]
+
+            recall_result = await brain.recall(message, user_id=user_id)
+            memories_used = len(recall_result["memories"])
+
+            yield f"data: {json.dumps({'event': 'start', 'memories_used': memories_used})}\n\n"
+
+            chunks: list[str] = []
+            async for token in brain.stream_chat(
+                message,
+                user_id=user_id,
+                history=req.history,
+                memories=recall_result["memories"],
+            ):
+                restored = await asyncio.to_thread(_pii.restore, token)
+                chunks.append(restored)
+                yield f"data: {json.dumps({'event': 'token', 'text': restored})}\n\n"
+
+            response_text = "".join(chunks)
+            await asyncio.to_thread(
+                _store_conversation_turn,
+                user_message=message,
+                assistant_response=response_text,
+                user_id=user_id,
+                history=req.history,
+            )
+            yield f"data: {json.dumps({'event': 'done', 'text': response_text})}\n\n"
+
+        except EngramError:
+            yield f"data: {json.dumps({'event': 'error', 'detail': 'engram error'})}\n\n"
+            raise
+        except Exception as e:
+            handle(e)
+            yield f"data: {json.dumps({'event': 'error', 'detail': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 @app.get("/memory/list", response_model=list[MemoryListItem])
 @limiter.limit(settings.rate_limit_recall)

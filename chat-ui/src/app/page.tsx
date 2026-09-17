@@ -114,8 +114,13 @@ export default function Home() {
     setInput("");setSending(true);
     const hist=(convs.find(c=>c.id===cid)?.messages??[]).filter(m=>!m.isThinking).map(m=>({role:m.role,content:m.content}));
     try {
-      const res=await api.chat(text,hist);
-      upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:res.response,isThinking:false,memoriesUsed:res.memories_used}:m)}));
+      let acc="";
+      await api.streamChat(text,hist,(tok)=>{acc+=tok;upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:acc,isThinking:false}:m)}));}).catch(async(e)=>{
+        const res=await api.chat(text,hist);
+        upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:res.response,isThinking:false,memoriesUsed:res.memories_used}:m)}));
+      });
+      await new Promise(r=>setTimeout(r,120));
+      upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:acc||m.content,isThinking:false}:m)}));
     } catch(e){
       upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:friendlyError(e),isThinking:false,isError:true}:m)}));
     } finally{setSending(false);setTimeout(()=>inputRef.current?.focus(),50);}

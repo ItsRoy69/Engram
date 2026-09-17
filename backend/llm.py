@@ -264,6 +264,123 @@ def chat_complete(system: str, history: list[dict], message: str) -> str:
         raise ValueError(f"Unknown LLM provider: '{provider}'.")
     return fn(system, history, message)
 
+# ---------------------------------------------------------------------------
+# Streaming (token-level) — same providers, same prompt construction.
+# `chat_complete()` above stays byte-identical; these are additive.
+# Each *_chat_stream() is a **sync generator** (runs inside the OpenAI SDK /
+# genai / anthropic iterables). stream_chat_complete() drives them through
+# asyncio.to_thread so the FastAPI event loop is never blocked per token.
+# ---------------------------------------------------------------------------
+
+def _gemini_chat_stream(system: str, history: list[dict], message: str):
+    import google.generativeai as genai
+    api_key = os.getenv("GEMINI_API_KEY", getattr(settings, "gemini_api_key", ""))
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(
+        model_name=get_model(),
+        system_instruction=system,
+    )
+    gemini_history = [{"role": m["role"], "parts": [m["content"]]} for m in history]
+    session = model.start_chat(history=gemini_history)
+    response = session.send_message(message, stream=True)
+    for chunk in response:
+        try:
+            text = chunk.text or ""
+        except Exception:
+            continue
+        if text:
+            yield text
+
+def _openai_chat_stream(system: str, history: list[dict], message: str):
+    from openai import OpenAI
+    import os
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    messages = [{"role": "system", "content": system}]
+    for m in history:
+        role = "assistant" if m["role"] == "model" else m["role"]
+        messages.append({"role": role, "content": m["content"]})
+    messages.append({"role": "user", "content": message})
+    stream = client.chat.completions.create(
+        model=get_model(),
+        messages=messages,
+        max_tokens=2048,
+        stream=True,
+    )
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if delta and delta.content:
+            yield delta.content
+
+def _anthropic_chat_stream(system: str, history: list[dict], message: str):
+    import anthropic
+    import typing
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    messages = []
+    for m in history:
+        role = "assistant" if m["role"] == "model" else m["role"]
+        messages.append({"role": role, "content": m["content"]})
+    messages.append({"role": "user", "content": message})
+    with client.messages.stream(
+        model=get_model(),
+        max_tokens=2048,
+        system=system,
+        messages=messages,
+    ) as stream:
+        for text in stream.text_stream:
+            if text:
+                yield text
+
+def _deepseek_chat_stream(system: str, history: list[dict], message: str):
+    from openai import OpenAI
+    import os
+    client = OpenAI(
+        api_key=os.environ["DEEPSEEK_API_KEY"],
+        base_url="https://api.deepseek.com",
+    )
+    messages = [{"role": "system", "content": system}]
+    for m in history:
+        role = "assistant" if m["role"] == "model" else m["role"]
+        messages.append({"role": role, "content": m["content"]})
+    messages.append({"role": "user", "content": message})
+    stream = client.chat.completions.create(
+        model=get_model(),
+        messages=messages,
+        max_tokens=2048,
+        stream=True,
+    )
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if delta and delta.content:
+            yield delta.content
+
+_STREAM_CHAT = {
+    "gemini":    _gemini_chat_stream,
+    "openai":    _openai_chat_stream,
+    "anthropic": _anthropic_chat_stream,
+    "deepseek":  _deepseek_chat_stream,
+}
+
+async def stream_chat_complete(system: str, history: list[dict], message: str) -> typing.AsyncIterator[str]:
+    """Async stream of chat tokens. Falls back to a single non-streaming
+    completion (one yield) when the provider has no stream path, so callers
+    can always consume it identically."""
+    provider = get_provider()
+    fn = _STREAM_CHAT.get(provider)
+    if not fn:
+        yield await asyncio.to_thread(chat_complete, system, history, message)
+        return
+    for token in await asyncio.to_thread(_run_stream, fn, system, history, message):
+        if token:
+            yield token
+
+def _run_stream(fn, system, history, message):
+    for token in fn(system, history, message):
+        yield token
+
 def provider_info() -> dict:
     """Returns current provider and model — used by /health endpoint."""
     return {"provider": get_provider(), "model": get_model()}
