@@ -14,6 +14,7 @@ from db import get_pg, get_qdrant
 from datetime import datetime
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from embedder import embedder
+from search import invalidate_bm25_cache
 from config import get_settings
 
 settings = get_settings()
@@ -42,6 +43,8 @@ def invalidate_memory(memory_id: str, reason: str = ""):
         },
         points=[memory_id]
     )
+
+    invalidate_bm25_cache()
 
     try:
         conn = _pg_conn()

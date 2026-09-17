@@ -13,7 +13,7 @@ from qdrant_client.models import (
     SparseVector,
 )
 from embedder import embedder
-from search import tokenize, tokens_to_sparse_vector
+from search import tokenize, tokens_to_sparse_vector, invalidate_bm25_cache
 from config import get_settings
 
 settings = get_settings()
@@ -139,6 +139,8 @@ def store(content: str, user_id: str = "default", tags: list[str] = []) -> str:
             }
         )]
     )
+
+    invalidate_bm25_cache()
 
     print(f"[Engram] Stored [{memory_id[:8]}]: {content[:60]}")
     return memory_id

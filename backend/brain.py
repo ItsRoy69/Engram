@@ -10,6 +10,7 @@ RECALL pipeline:
   query → HyDE expand → hybrid search → TTL filter → graph expand
         → rerank → context guard → return
 """
+import asyncio
 import tiktoken
 import pii
 from db import get_qdrant
@@ -32,9 +33,15 @@ settings = get_settings()
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
-def remember(content: str, user_id: str = "default", tags: list[str] = [], history: list[dict] = []) -> dict:
+async def remember(content: str, user_id: str = "default", tags: list[str] = [], history: list[dict] = []) -> dict:
     """
-    Full store pipeline.
+    Full store pipeline (async).
+
+    The pipeline is inherently sequential — each fact's duplicate and
+    supersession checks depend on the writes before it — so it runs as a
+    single unit in a worker thread. That keeps the event loop free while
+    the blocking LLM / Qdrant / Redis / Postgres calls execute.
+
     Returns summary of what was stored.
 
     Args:
@@ -45,6 +52,9 @@ def remember(content: str, user_id: str = "default", tags: list[str] = [], histo
                  dicts. When provided, sliding window coreference resolution
                  runs before fact extraction to resolve orphaned pronouns.
     """
+    return await asyncio.to_thread(_remember_sync, content, user_id, tags, history)
+
+def _remember_sync(content: str, user_id: str, tags: list[str], history: list[dict]) -> dict:
     result = {
         "stored": 0,
         "skipped_duplicates": 0,
@@ -118,23 +128,13 @@ def remember(content: str, user_id: str = "default", tags: list[str] = [], histo
 
     return result
 
-def recall(query: str, user_id: str = "default") -> dict:
+def _graph_expand(active: list[dict], user_id: str) -> list[dict]:
     """
-    Full recall pipeline.
-    Returns top memories with context token count.
+    Expand recall candidates with valid graph neighbours (synchronous).
+
+    Kept as a standalone sync helper so recall() can offload it to a
+    worker thread along with the other blocking stages.
     """
-
-    expanded_query = expand(query)
-
-    candidates = hybrid_search(expanded_query, user_id=user_id, top_k=settings.top_k_retrieval)
-
-    if not candidates:
-        return {"query": query, "memories": [], "total_found": 0, "context_tokens": 0}
-
-    active = [c for c in candidates if not is_expired(c["id"])]
-
-    active = filter_by_retention(active)
-
     try:
         client = get_qdrant()
         seen_ids = {c["id"] for c in active}
@@ -161,11 +161,42 @@ def recall(query: str, user_id: str = "default") -> dict:
 
         if graph_additions:
             print(f"[Engram] Graph expansion added {len(graph_additions)} neighbour(s)")
-            active = active + graph_additions
+        return active + graph_additions
     except Exception as e:
         print(f"[Engram] Graph expansion failed (non-critical): {e}")
+        return active
 
-    reranked = rerank(query, active, top_k=settings.top_k_reranked)
+async def recall(query: str, user_id: str = "default") -> dict:
+    """
+    Full recall pipeline (async).
+
+    Blocking stages (HyDE LLM call, hybrid search, TTL checks, retention,
+    graph expansion, cross-encoder rerank) are offloaded to worker threads
+    so the event loop stays free. The independent TTL checks run
+    concurrently rather than one Redis round-trip at a time.
+
+    Returns top memories with context token count.
+    """
+
+    expanded_query = await asyncio.to_thread(expand, query)
+
+    candidates = await asyncio.to_thread(
+        hybrid_search, expanded_query, user_id, settings.top_k_retrieval
+    )
+
+    if not candidates:
+        return {"query": query, "memories": [], "total_found": 0, "context_tokens": 0}
+
+    expiry = await asyncio.gather(
+        *(asyncio.to_thread(is_expired, c["id"]) for c in candidates)
+    )
+    active = [c for c, expired in zip(candidates, expiry) if not expired]
+
+    active = await asyncio.to_thread(filter_by_retention, active)
+
+    active = await asyncio.to_thread(_graph_expand, active, user_id)
+
+    reranked = await asyncio.to_thread(rerank, query, active, settings.top_k_reranked)
 
     final = []
     total_tokens = 0
@@ -184,15 +215,28 @@ def recall(query: str, user_id: str = "default") -> dict:
         "context_tokens": total_tokens,
     }
 
-def chat(message: str, user_id: str = "default", history: list[dict] = []) -> str:
+async def chat(
+    message: str,
+    user_id: str = "default",
+    history: list[dict] = [],
+    memories: list[dict] | None = None,
+) -> str:
     """
-    Memory-augmented chat.
-    Recalls relevant memories → injects into system prompt → returns answer.
+    Memory-augmented chat (async).
+    Injects relevant memories into the system prompt → returns answer.
     Works with any configured LLM provider (Gemini, OpenAI, Anthropic, DeepSeek).
+
+    Args:
+        memories: Optional pre-fetched recall results. Pass these when the
+                  caller has already run recall() for this message (e.g. the
+                  /chat endpoint, which needs the count for its response) to
+                  avoid running the retrieval pipeline twice. When None,
+                  chat() recalls on its own.
     """
 
-    result = recall(message, user_id=user_id)
-    memories = result["memories"]
+    if memories is None:
+        result = await recall(message, user_id=user_id)
+        memories = result["memories"]
 
     if memories:
         memory_context = "Relevant memories from your knowledge base:\n"
@@ -210,4 +254,6 @@ def chat(message: str, user_id: str = "default", history: list[dict] = []) -> st
         "Be concise and helpful."
     )
 
-    return chat_complete(system=system_prompt, history=history, message=message)
+    return await asyncio.to_thread(
+        chat_complete, system_prompt, history, message
+    )

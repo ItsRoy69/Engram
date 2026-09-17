@@ -6,6 +6,7 @@ Merges results via Reciprocal Rank Fusion (RRF).
 import re
 import hashlib
 import numpy as np
+from functools import lru_cache
 from rank_bm25 import BM25Okapi
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -137,18 +138,53 @@ def _fetch_corpus(user_id: str) -> tuple[list[str], list[dict]]:
     contents = [d["content"] for d in all_docs]
     return contents, all_docs
 
+@lru_cache(maxsize=32)
+def _get_bm25_index(user_id: str) -> tuple[list[str], list[dict], BM25Okapi | None]:
+    """
+    Fetch + tokenise + build the BM25Okapi index for one user, memoised.
+
+    Building the index is the expensive part of keyword search: a bounded
+    Qdrant scroll, tokenisation of every document, and BM25 corpus stats.
+    Memoising per user means repeated queries reuse one in-memory index
+    instead of doing all of that on every call.
+
+    Memory is bounded by lru_cache(maxsize=32) — at most 32 users' indexes
+    are retained; the least-recently-used is evicted. lru_cache is
+    thread-safe in CPython, so no extra locking is needed.
+
+    Correctness: call invalidate_bm25_cache() whenever a user's set of
+    valid/latest memories changes (store, delete, supersession).
+    """
+    contents, all_docs = _fetch_corpus(user_id)
+    tokenized_corpus = [tokenize(c) for c in contents]
+    bm25 = BM25Okapi(tokenized_corpus) if tokenized_corpus else None
+    return contents, all_docs, bm25
+
+def invalidate_bm25_cache() -> None:
+    """
+    Drop every cached BM25 index.
+
+    Called after any write that changes a user's valid/latest memory set
+    (store, delete, supersession) so the next query rebuilds from Qdrant.
+
+    Clearing all users rather than one is deliberate: writes are far rarer
+    than reads, and it keeps every write path correct without having to
+    thread user_id through it.
+    """
+    _get_bm25_index.cache_clear()
+
 def _bm25_search(query: str, user_id: str, top_k: int) -> list[dict]:
     """
     BM25Okapi keyword search with true IDF weighting over a bounded corpus.
 
     How it works:
-      1. Fetch up to `bm25_max_corpus` of the user's most recent memories
-         from Qdrant (capped, newest-first payload-only scroll).
-      2. Tokenise every memory with the shared deterministic tokeniser.
-      3. Build a BM25Okapi index (Robertson et al., k1=1.5, b=0.75).
-      4. Score the query — rare terms score exponentially higher than
+      1. Get the user's BM25 index — fetched and built on first use, then
+         reused across queries until invalidate_bm25_cache() is called.
+         The underlying corpus is up to `bm25_max_corpus` of the user's
+         most recent memories from Qdrant (capped, newest-first).
+      2. Score the query — rare terms score exponentially higher than
          common ones, unlike the old TF-only sparse vectors.
-      5. Return top_k results ordered by descending BM25 score.
+      3. Return top_k results ordered by descending BM25 score.
 
     Graceful fallbacks:
       • Empty corpus     -> returns []  (silent)
@@ -156,16 +192,13 @@ def _bm25_search(query: str, user_id: str, top_k: int) -> list[dict]:
       • Any exception    -> returns []  and logs the error
     """
     try:
-        contents, all_docs = _fetch_corpus(user_id)
+        contents, all_docs, bm25 = _get_bm25_index(user_id)
     except Exception as e:
         print(f"[Engram] BM25 corpus fetch failed (non-critical): {e}")
         return []
 
-    if not contents:
+    if not contents or bm25 is None:
         return []
-
-    tokenized_corpus = [tokenize(c) for c in contents]
-    bm25 = BM25Okapi(tokenized_corpus)
 
     query_tokens = tokenize(query)
     if not query_tokens:

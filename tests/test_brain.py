@@ -4,6 +4,7 @@ Run from project root: python tests/test_brain.py
 This is the end-to-end test of the entire backend.
 """
 import sys
+import asyncio
 sys.path.append("backend")
 
 from brain import remember, recall, chat
@@ -12,11 +13,11 @@ USER = "test_brain"
 
 def test_remember():
     print("  Testing remember() — full store pipeline...")
-    result = remember(
+    result = asyncio.run(remember(
         "Had a team meeting today. John leads backend. We agreed the API uses camelCase. Deadline is next Friday.",
         user_id=USER,
         tags=["meeting"]
-    )
+    ))
     print(f"  Stored: {result['stored']} facts")
     print(f"  Skipped duplicates: {result['skipped_duplicates']}")
     print(f"  Contradictions resolved: {result['contradictions_resolved']}")
@@ -27,7 +28,7 @@ def test_remember():
 
 def test_recall():
     print("\n  Testing recall() — full retrieval pipeline...")
-    result = recall("what naming convention do we use for APIs?", user_id=USER)
+    result = asyncio.run(recall("what naming convention do we use for APIs?", user_id=USER))
     print(f"  Found {result['total_found']} candidates → top {len(result['memories'])} after rerank")
     print(f"  Context tokens: {result['context_tokens']}")
     for m in result["memories"]:
@@ -37,7 +38,7 @@ def test_recall():
 
 def test_chat():
     print("\n  Testing chat() — memory-augmented response...")
-    response = chat("What naming convention did we agree on for APIs?", user_id=USER)
+    response = asyncio.run(chat("What naming convention did we agree on for APIs?", user_id=USER))
     print(f"  Response: {response[:150]}")
     assert len(response) > 0, "Should return a response"
     assert "camelCase" in response or "camel" in response.lower(), \

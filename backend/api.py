@@ -20,6 +20,7 @@ Run:
 import sys
 import os
 import re
+import asyncio
 sys.path.insert(0, os.path.dirname(__file__))
 
 for _stream in (sys.stdout, sys.stderr):
@@ -369,7 +370,7 @@ class HealthResponse(BaseModel):
 
 @app.post("/memory/store", response_model=StoreResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.rate_limit_store)
-def store_memory(req: StoreRequest, request: Request, current_user: dict = Depends(get_current_user)):
+async def store_memory(req: StoreRequest, request: Request, current_user: dict = Depends(get_current_user)):
     content = _normalize_content(req.content)
     if not content:
         raise HTTPException(status_code=400, detail="content cannot be empty")
@@ -377,7 +378,7 @@ def store_memory(req: StoreRequest, request: Request, current_user: dict = Depen
         raise HTTPException(status_code=413, detail=f"history exceeds {settings.max_history_turns} turns")
     user_id = current_user["sub"]
     try:
-        result = brain.remember(content, user_id=user_id, tags=req.tags, history=req.history)
+        result = await brain.remember(content, user_id=user_id, tags=req.tags, history=req.history)
         return StoreResponse(**result)
     except EngramError:
         raise
@@ -386,14 +387,14 @@ def store_memory(req: StoreRequest, request: Request, current_user: dict = Depen
 
 @app.post("/memory/recall", response_model=RecallResponse)
 @limiter.limit(settings.rate_limit_recall)
-def recall_memories(req: RecallRequest, request: Request, current_user: dict = Depends(get_current_user)):
+async def recall_memories(req: RecallRequest, request: Request, current_user: dict = Depends(get_current_user)):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query cannot be empty")
     if len(req.query) > settings.max_query_length:
         raise HTTPException(status_code=413, detail=f"query exceeds {settings.max_query_length} characters")
     user_id = current_user["sub"]
     try:
-        result = brain.recall(req.query, user_id=user_id)
+        result = await brain.recall(req.query, user_id=user_id)
         memories = [MemoryItem(**m) for m in result["memories"]]
         return RecallResponse(
             query=result["query"],
@@ -406,7 +407,7 @@ def recall_memories(req: RecallRequest, request: Request, current_user: dict = D
     except Exception as e:
         handle(e)
 
-def _store_conversation_turn(user_message: str, assistant_response: str, user_id: str, history: list[dict]) -> None:
+async def _store_conversation_turn(user_message: str, assistant_response: str, user_id: str, history: list[dict]) -> None:
     """
     Persist a conversation turn as a memory.
     Called via FastAPI BackgroundTasks — runs after the response is sent,
@@ -424,14 +425,14 @@ def _store_conversation_turn(user_message: str, assistant_response: str, user_id
     """
     try:
         turn = f"User: {user_message}\nAssistant: {assistant_response}"
-        brain.remember(turn, user_id=user_id, tags=["conversation"], history=history)
+        await brain.remember(turn, user_id=user_id, tags=["conversation"], history=history)
         print(f"[Engram] Conversation turn stored for user [{user_id[:8]}]")
     except Exception as e:
         print(f"[Engram] Background turn store failed (non-critical): {e}")
 
 @app.post("/chat", response_model=ChatResponse)
 @limiter.limit(settings.rate_limit_chat)
-def chat(
+async def chat(
     req: ChatRequest,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -447,16 +448,17 @@ def chat(
         message = _normalize_content(req.message)
         user_id = current_user["sub"]
 
-        recall_result = brain.recall(message, user_id=user_id)
+        recall_result = await brain.recall(message, user_id=user_id)
         memories_used = len(recall_result["memories"])
 
-        response_text = brain.chat(
+        response_text = await brain.chat(
             message,
             user_id=user_id,
             history=req.history,
+            memories=recall_result["memories"],
         )
 
-        response_text = _pii.restore(response_text)
+        response_text = await asyncio.to_thread(_pii.restore, response_text)
 
         background_tasks.add_task(
             _store_conversation_turn,
