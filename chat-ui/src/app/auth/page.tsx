@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { login, register, isLoggedIn } from "@/lib/auth";
@@ -11,116 +12,210 @@ export default function AuthPage() {
   const [email, setEmail]   = useState("");
   const [username, setUser] = useState("");
   const [password, setPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [error, setError]   = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { if (isLoggedIn()) router.replace("/"); }, [router]);
+  useEffect(() => {
+    if (isLoggedIn()) router.replace("/");
+  }, [router]);
 
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(""); setLoading(true);
+    e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
-      if (mode === "signin") { await login(email, password); }
-      else {
-        if (username.length < 3) { setError("Username must be at least 3 characters"); setLoading(false); return; }
-        if (password.length < 8) { setError("Password must be at least 8 characters"); setLoading(false); return; }
+      if (mode === "signin") {
+        await login(email, password);
+      } else {
+        if (username.length < 3) {
+          setError("Username must be at least 3 characters");
+          setLoading(false);
+          return;
+        }
+        if (password.length < 8) {
+          setError("Password must be at least 8 characters");
+          setLoading(false);
+          return;
+        }
         await register(email, username, password);
       }
       router.replace("/");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",padding:16,fontFamily:"'Geist',sans-serif"}}>
-      <div style={{width:"100%",maxWidth:380}}>
+    <div className="relative min-h-screen flex items-center justify-center p-4 selection:bg-indigo-500/30 selection:text-indigo-200">
+      {/* Ambient background glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[320px] bg-gradient-to-tr from-indigo-600/15 via-purple-600/10 to-transparent blur-3xl pointer-events-none -z-10" />
 
-        <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8}}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round">
-              <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/><path d="M2 18a10 10 0 0 1 20 0"/>
-            </svg>
-            <span style={{fontSize:22,fontWeight:700,letterSpacing:"-0.5px",color:"var(--text)"}}>Engram</span>
+      <div className="w-full max-w-[400px] animate-fade-in">
+        {/* Brand Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-accent-3 text-[11px] font-medium tracking-wide uppercase mb-4 shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse-dot" />
+            Engram Intelligence
           </div>
-          <p style={{fontSize:13,color:"var(--text-3)"}}>Your private AI memory layer</p>
+
+          <div className="flex items-center justify-center gap-2.5 mb-2">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 p-[1px] shadow-lg shadow-indigo-500/20">
+              <div className="w-full h-full bg-[#0d0f17] rounded-[11px] flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-indigo-400" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>
+                  <path d="M2 18a10 10 0 0 1 20 0"/>
+                </svg>
+              </div>
+            </div>
+            <span className="text-2xl font-bold tracking-tight text-white font-sans">Engram</span>
+          </div>
+          <p className="text-[13px] text-txt-3">Persistent personal AI memory & knowledge graph</p>
         </div>
 
-        <div style={{background:"var(--bg-2)",border:"1px solid var(--border)",borderRadius:20,padding:24}}>
+        {/* Auth Glass Card */}
+        <div className="glass-card rounded-2xl p-6 sm:p-7 relative overflow-hidden">
+          {/* Subtle top border highlight */}
+          <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
 
-          <div style={{display:"flex",gap:4,background:"var(--bg-3)",borderRadius:12,padding:4,marginBottom:24}}>
-            {(["signin","signup"] as Mode[]).map(m=>(
-              <button key={m} onClick={()=>{setMode(m);setError("");}} style={{
-                flex:1,padding:"8px 0",fontSize:13,fontWeight:500,borderRadius:9,border:"none",cursor:"pointer",
-                background:mode===m?"var(--bg-4)":"transparent",
-                color:mode===m?"var(--text)":"var(--text-3)",
-                boxShadow:mode===m?"0 1px 3px rgba(0,0,0,0.3)":"none",
-                transition:"all 0.15s"
-              }}>{m==="signin"?"Sign in":"Sign up"}</button>
+          {/* Segmented Mode Selector */}
+          <div className="flex p-1 bg-bg-4/60 border border-white/[0.06] rounded-xl mb-6">
+            {(["signin", "signup"] as Mode[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setError("");
+                }}
+                className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-150 ${
+                  mode === m
+                    ? "bg-[#1f2433] text-white shadow-md shadow-black/40 border border-white/[0.08]"
+                    : "text-txt-3 hover:text-txt-2"
+                }`}
+              >
+                {m === "signin" ? "Sign in" : "Create account"}
+              </button>
             ))}
           </div>
 
-          <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:14}}>
-
+          <form onSubmit={submit} className="space-y-4">
             <div>
-              <label style={{display:"block",fontSize:11,color:"var(--text-3)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,fontWeight:500}}>Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="you@example.com" style={{
-                width:"100%",background:"var(--bg-3)",border:"1px solid var(--border)",borderRadius:12,
-                padding:"10px 14px",fontSize:13,color:"var(--text)",outline:"none",boxSizing:"border-box",
-                fontFamily:"inherit",transition:"border-color 0.15s"
-              }} onFocus={e=>(e.target.style.borderColor="var(--border-2)")} onBlur={e=>(e.target.style.borderColor="var(--border)")}/>
+              <label className="block text-[11px] font-medium text-txt-3 uppercase tracking-wider mb-1.5">
+                Email address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="alex@example.com"
+                className="w-full bg-[#11141d] border border-white/[0.08] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/15 rounded-xl px-3.5 py-2.5 text-[13px] text-txt placeholder:text-txt-4 outline-none transition-all"
+              />
             </div>
 
-            {mode==="signup"&&(
-              <div>
-                <label style={{display:"block",fontSize:11,color:"var(--text-3)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,fontWeight:500}}>Username</label>
-                <input type="text" value={username} onChange={e=>setUser(e.target.value)} required placeholder="yourname" minLength={3} maxLength={50} style={{
-                  width:"100%",background:"var(--bg-3)",border:"1px solid var(--border)",borderRadius:12,
-                  padding:"10px 14px",fontSize:13,color:"var(--text)",outline:"none",boxSizing:"border-box",
-                  fontFamily:"inherit",transition:"border-color 0.15s"
-                }} onFocus={e=>(e.target.style.borderColor="var(--border-2)")} onBlur={e=>(e.target.style.borderColor="var(--border)")}/>
+            {mode === "signup" && (
+              <div className="animate-fade-in">
+                <label className="block text-[11px] font-medium text-txt-3 uppercase tracking-wider mb-1.5">
+                  Display name
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUser(e.target.value)}
+                  required
+                  placeholder="alex"
+                  minLength={3}
+                  maxLength={50}
+                  className="w-full bg-[#11141d] border border-white/[0.08] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/15 rounded-xl px-3.5 py-2.5 text-[13px] text-txt placeholder:text-txt-4 outline-none transition-all"
+                />
               </div>
             )}
 
             <div>
-              <label style={{display:"block",fontSize:11,color:"var(--text-3)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,fontWeight:500}}>Password</label>
-              <input type="password" value={password} onChange={e=>setPass(e.target.value)} required
-                placeholder={mode==="signup"?"Min 8 characters":"••••••••"} minLength={mode==="signup"?8:1} style={{
-                  width:"100%",background:"var(--bg-3)",border:"1px solid var(--border)",borderRadius:12,
-                  padding:"10px 14px",fontSize:13,color:"var(--text)",outline:"none",boxSizing:"border-box",
-                  fontFamily:"inherit",transition:"border-color 0.15s"
-                }} onFocus={e=>(e.target.style.borderColor="var(--border-2)")} onBlur={e=>(e.target.style.borderColor="var(--border)")}/>
+              <label className="block text-[11px] font-medium text-txt-3 uppercase tracking-wider mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPass ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPass(e.target.value)}
+                  required
+                  placeholder={mode === "signup" ? "Min. 8 characters" : "••••••••"}
+                  minLength={mode === "signup" ? 8 : 1}
+                  className="w-full bg-[#11141d] border border-white/[0.08] focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/15 rounded-xl px-3.5 py-2.5 pr-16 text-[13px] text-txt placeholder:text-txt-4 outline-none transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-txt-3 hover:text-txt-2"
+                >
+                  {showPass ? "Hide" : "Show"}
+                </button>
+              </div>
             </div>
 
-            {error&&(
-              <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:10,padding:"10px 12px"}}>
-                <span style={{color:"var(--red)",fontSize:13,flexShrink:0}}>⚠</span>
-                <p style={{fontSize:12,color:"#fca5a5",lineHeight:1.5}}>{error}</p>
+            {error && (
+              <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-300 text-xs animate-slide-in">
+                <span className="text-red-400 font-bold shrink-0 mt-0.5">!</span>
+                <p className="leading-relaxed">{error}</p>
               </div>
             )}
 
-            <button type="submit" disabled={loading} style={{
-              padding:"11px 0",background:"var(--accent)",border:"none",borderRadius:12,
-              color:"white",fontSize:13,fontWeight:500,cursor:loading?"default":"pointer",
-              opacity:loading?0.6:1,transition:"all 0.15s",marginTop:4,fontFamily:"inherit"
-            }}
-              onMouseEnter={e=>{if(!loading)(e.currentTarget as HTMLElement).style.background="var(--accent-2)";}}
-              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="var(--accent)";}}>
-              {loading?(mode==="signin"?"Signing in…":"Creating account…"):(mode==="signin"?"Sign in →":"Create account →")}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 mt-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-medium text-[13px] rounded-xl shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/35 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>{mode === "signin" ? "Signing in…" : "Creating account…"}</span>
+                </>
+              ) : (
+                <span>{mode === "signin" ? "Sign in to workspace →" : "Create account →"}</span>
+              )}
             </button>
           </form>
 
-          <p style={{textAlign:"center",fontSize:12,color:"var(--text-3)",marginTop:18}}>
-            {mode==="signin"?"No account? ":"Already have an account? "}
-            <button onClick={()=>{setMode(mode==="signin"?"signup":"signin");setError("");}} style={{
-              color:"var(--accent-2)",background:"none",border:"none",cursor:"pointer",fontSize:12,
-              textDecoration:"underline",textUnderlineOffset:3
-            }}>{mode==="signin"?"Sign up":"Sign in"}</button>
-          </p>
+          <div className="mt-5 text-center">
+            <span className="text-xs text-txt-3">
+              {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError("");
+              }}
+              className="text-xs text-accent-2 hover:text-accent-3 font-medium underline underline-offset-4"
+            >
+              {mode === "signin" ? "Sign up" : "Sign in"}
+            </button>
+          </div>
         </div>
 
-        <p style={{textAlign:"center",fontSize:11,color:"var(--text-3)",marginTop:20,lineHeight:1.6}}>
-          Private & self-hosted · Your data stays with you
-        </p>
+        {/* Value Props Footer */}
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] text-txt-3">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            Temporal Graph
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+            Hybrid Vector Recall
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+            100% Private
+          </span>
+        </div>
       </div>
     </div>
   );

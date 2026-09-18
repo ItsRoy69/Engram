@@ -112,6 +112,20 @@ export function friendlyError(e: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
+export interface MemoryHistoryResult {
+  memory_id: string;
+  history: any[];
+  versions: number;
+}
+
+export interface MemoryChainResult {
+  memory_id: string;
+  chain: {
+    superseded_by?: any;
+    supersedes?: any;
+  };
+}
+
 export const api = {
   health: () => request<HealthResult>("/health"),
 
@@ -128,6 +142,7 @@ export const api = {
     message: string,
     history: { role: string; content: string }[] = [],
     onToken: (token: string) => void,
+    onStart?: (info: { memoriesUsed: number }) => void,
     signal?: AbortSignal,
   ): Promise<string> => {
     const res = await fetch(`${API}/chat/stream`, {
@@ -162,14 +177,16 @@ export const api = {
         const line = frame.split("\n").find((l) => l.startsWith("data:"));
         if (!line) continue;
         const raw = line.slice(5).trim();
-        let parsed: { event?: string; text?: string };
+        let parsed: { event?: string; text?: string; memories_used?: number };
         try {
           parsed = JSON.parse(raw);
         } catch {
           continue;
         }
         const ev = parsed.event;
-        if (ev === "token" && parsed.text) {
+        if (ev === "start" && typeof parsed.memories_used === "number") {
+          onStart?.({ memoriesUsed: parsed.memories_used });
+        } else if (ev === "token" && parsed.text) {
           full += parsed.text;
           onToken(parsed.text);
         } else if (ev === "done" && parsed.text) {
@@ -180,8 +197,12 @@ export const api = {
     return full;
   },
 
-  list: (limit = 50) => request<Memory[]>(`/memory/list?limit=${limit}`),
+  list: (limit = 100) => request<Memory[]>(`/memory/list?limit=${limit}`),
 
   delete: (memoryId: string) =>
     request<{ memory_id: string; status: string }>(`/memory/${memoryId}`, { method: "DELETE" }),
+
+  history: (memoryId: string) => request<MemoryHistoryResult>(`/memory/${memoryId}/history`),
+
+  chain: (memoryId: string) => request<MemoryChainResult>(`/memory/${memoryId}/chain`),
 };

@@ -1,62 +1,209 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { api, Memory, friendlyError, EngramApiError } from "@/lib/api";
+import { api, Memory, HealthResult, friendlyError } from "@/lib/api";
 import { getUser, logout, isLoggedIn, type User } from "@/lib/auth";
 
 type Role = "user" | "assistant";
-interface Message { id: string; role: Role; content: string; memoriesUsed?: number; isThinking?: boolean; isError?: boolean; }
-interface Conversation { id: string; title: string; messages: Message[]; createdAt: number; }
-type Panel = "chat" | "memories";
+interface Message {
+  id: string;
+  role: Role;
+  content: string;
+  memoriesUsed?: number;
+  isThinking?: boolean;
+  isError?: boolean;
+}
+interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: number;
+}
+type Panel = "chat" | "vault" | "graph";
 
 const OB_QUESTIONS = [
   "What is your full name and what do you do professionally?",
-  "What are your main technical skills or areas of expertise?",
-  "What projects are you currently working on?",
+  "What are your main technical skills, languages, or areas of expertise?",
+  "What projects are you currently developing or managing?",
   "What are your long-term goals — personal and professional?",
-  "What do you like and dislike? (hobbies, foods, preferences)",
-  "Who are the important people in your life?",
-  "What tools, languages, or frameworks do you use daily?",
-  "What topics are you actively learning right now?",
-  "Any recurring commitments, routines, or constraints I should know?",
-  "Anything else important you'd want me to always remember?",
+  "What are your strong preferences or dislikes (tools, foods, workflow)?",
+  "Who are the key people, collaborators, or teammates in your life?",
+  "What development tools, IDEs, or frameworks do you use daily?",
+  "What topics or technologies are you actively exploring right now?",
+  "Any recurring routines, commitments, or constraints I should know?",
+  "Anything else fundamental you want Engram to always keep in mind?",
 ];
 
-function uid() { return Math.random().toString(36).slice(2, 9); }
+const PROMPT_STARTERS = [
+  {
+    icon: "💻",
+    title: "Technical Stack & Tools",
+    prompt: "What is my current technical stack, preferred tools, and engineering habits?",
+  },
+  {
+    icon: "🚀",
+    title: "Active Projects",
+    prompt: "Summarize the active projects and goals you know I am currently working on.",
+  },
+  {
+    icon: "⚙️",
+    title: "Routines & Preferences",
+    prompt: "What do you remember about my daily routines, constraints, and work preferences?",
+  },
+  {
+    icon: "🧠",
+    title: "Full Knowledge Briefing",
+    prompt: "Give me a structured briefing of everything you remember across my memories.",
+  },
+];
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
 function timeAgo(iso: string) {
+  if (!iso) return "recently";
   const d = (Date.now() - new Date(iso).getTime()) / 1000;
   if (d < 60) return "just now";
   if (d < 3600) return `${Math.floor(d / 60)}m ago`;
   if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
   return `${Math.floor(d / 86400)}d ago`;
 }
+
 function renderMd(t: string) {
   return t
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-    .replace(/```[\w]*\n?([\s\S]*?)```/g,"<pre><code>$1</code></pre>")
-    .replace(/`([^`]+)`/g,"<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>")
-    .replace(/\*([^*\n]+)\*/g,"<em>$1</em>")
-    .replace(/^### (.+)$/gm,"<h3>$1</h3>").replace(/^## (.+)$/gm,"<h2>$1</h2>").replace(/^# (.+)$/gm,"<h1>$1</h1>")
-    .replace(/^[*-] (.+)$/gm,"<li>$1</li>")
-    .replace(/\n\n+/g,"</p><p>").replace(/\n/g,"<br>");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/```([\w]*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+    .replace(/^[*-] (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>[\s\S]*?<\/li>)(?:\s*<br>\s*(<li>[\s\S]*?<\/li>))*/g, (block) => `<ul>${block.replace(/<br>/g, "")}</ul>`)
+    .replace(/\n\n+/g, "</p><p>")
+    .replace(/\n/g, "<br>");
 }
-function titleFrom(msg: string) { return msg.slice(0,42)+(msg.length>42?"…":""); }
+
+function titleFrom(msg: string) {
+  return msg.slice(0, 36) + (msg.length > 36 ? "…" : "");
+}
 
 function ThinkingDots() {
   return (
-    <div className="flex items-center gap-1 py-1">
-      {[0,1,2].map(i=>(
-        <span key={i} className="w-1.5 h-1.5 rounded-full animate-pulse-dot"
-          style={{background:"var(--accent)",animationDelay:`${i*0.18}s`,opacity:0.5}}/>
-      ))}
+    <div className="flex items-center gap-1.5 py-1 px-1">
+      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse-dot" style={{ animationDelay: "0s" }} />
+      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse-dot" style={{ animationDelay: "0.2s" }} />
+      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse-dot" style={{ animationDelay: "0.4s" }} />
+    </div>
+  );
+}
+
+function KnowledgeGraphView({
+  memories,
+  onOpen,
+}: {
+  memories: Memory[];
+  onOpen: (m: Memory) => void;
+}) {
+  const nodes = memories.slice(0, 42);
+  const tags = Array.from(new Set(nodes.flatMap((m) => m.tags || []).filter(Boolean))).slice(0, 8);
+  const w = 760;
+  const h = 460;
+  const cx = w / 2;
+  const cy = h / 2;
+  const tagR = 92;
+  const memR = 188;
+
+  const tagPos = tags.map((tag, i) => {
+    const a = (i / Math.max(tags.length, 1)) * Math.PI * 2 - Math.PI / 2;
+    return { tag, x: cx + Math.cos(a) * tagR, y: cy + Math.sin(a) * tagR };
+  });
+
+  const memPos = nodes.map((m, i) => {
+    const a = (i / Math.max(nodes.length, 1)) * Math.PI * 2 - Math.PI / 2;
+    return {
+      m,
+      x: cx + Math.cos(a) * memR,
+      y: cy + Math.sin(a) * memR,
+      tag: m.tags?.[0],
+    };
+  });
+
+  if (nodes.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[360px] text-center px-6">
+        <p className="text-sm font-medium text-white mb-1">No graph nodes yet</p>
+        <p className="text-xs text-txt-3 max-w-sm">
+          Save memories from chat or the vault and they will appear here as connected facts.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0d16]">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto max-h-[min(460px,58vh)]">
+        <defs>
+          <radialGradient id="graphGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(99,102,241,0.18)" />
+            <stop offset="100%" stopColor="rgba(99,102,241,0)" />
+          </radialGradient>
+        </defs>
+        <circle cx={cx} cy={cy} r="210" fill="url(#graphGlow)" />
+        {memPos.map((node, i) => {
+          const t = tagPos.find((p) => p.tag === node.tag);
+          const x2 = t ? t.x : cx;
+          const y2 = t ? t.y : cy;
+          return (
+            <line
+              key={`e-${i}`}
+              x1={node.x}
+              y1={node.y}
+              x2={x2}
+              y2={y2}
+              stroke="rgba(129,140,248,0.22)"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {tagPos.map((t) => (
+          <g key={t.tag}>
+            <circle cx={t.x} cy={t.y} r="18" fill="#1a1338" stroke="rgba(167,139,250,0.55)" strokeWidth="1.4" />
+            <text x={t.x} y={t.y + 3} textAnchor="middle" fill="#c4b5fd" fontSize="8" fontFamily="ui-monospace, monospace">
+              #{t.tag.slice(0, 8)}
+            </text>
+          </g>
+        ))}
+        <circle cx={cx} cy={cy} r="22" fill="#11141f" stroke="rgba(99,102,241,0.7)" strokeWidth="1.6" />
+        <text x={cx} y={cy + 3} textAnchor="middle" fill="#a5b4fc" fontSize="9" fontWeight="600">
+          You
+        </text>
+        {memPos.map((node) => (
+          <g
+            key={node.m.id}
+            className="graph-node"
+            onClick={() => onOpen(node.m)}
+          >
+            <title>{node.m.content}</title>
+            <circle cx={node.x} cy={node.y} r="7" fill="#6366f1" stroke="#c7d2fe" strokeWidth="1" />
+            <text x={node.x} y={node.y + 16} textAnchor="middle" fill="#9ca3af" fontSize="7">
+              {node.m.content.replace(/\s+/g, " ").slice(0, 16)}
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
 
 export default function Home() {
-  const [user, setUser]               = useState<User|null>(null);
-  const [online, setOnline]           = useState<boolean|null>(null);
+  const [user, setUser]               = useState<User | null>(null);
+  const [healthData, setHealthData]   = useState<HealthResult | null>(null);
+  const [online, setOnline]           = useState<boolean | null>(null);
   const [panel, setPanel]             = useState<Panel>("chat");
   const [sidebarOpen, setSidebar]     = useState(true);
   const [showOb, setShowOb]           = useState(false);
@@ -64,362 +211,1117 @@ export default function Home() {
   const [activeId, setActiveId]       = useState("");
   const [input, setInput]             = useState("");
   const [sending, setSending]         = useState(false);
+  const [searchConv, setSearchConv]   = useState("");
+  const [copiedId, setCopiedId]       = useState<string | null>(null);
+
+  // Memories & Vault
   const [memories, setMemories]       = useState<Memory[]>([]);
   const [memSearch, setMemSearch]     = useState("");
+  const [selectedTag, setSelectedTag] = useState<string>("all");
   const [loadingMem, setLoadingMem]   = useState(false);
+
+  // Add Memory Modal
+  const [showAddMem, setShowAddMem]   = useState(false);
+  const [newMemText, setNewMemText]   = useState("");
+  const [newMemTags, setNewMemTags]   = useState("");
+  const [savingMem, setSavingMem]     = useState(false);
+
+  // Lineage / History Modal (HydraDB feature)
+  const [inspectMem, setInspectMem]   = useState<Memory | null>(null);
+  const [memHistory, setMemHistory]   = useState<any[]>([]);
+  const [loadingHistory, setLoadingHist] = useState(false);
+
+  // Onboarding wizard
   const [obStep, setObStep]           = useState(0);
   const [obAnswers, setObAnswers]     = useState<string[]>(Array(OB_QUESTIONS.length).fill(""));
   const [obSaving, setObSaving]       = useState(false);
   const [obDone, setObDone]           = useState(false);
+
   const messagesEnd                   = useRef<HTMLDivElement>(null);
   const inputRef                      = useRef<HTMLTextAreaElement>(null);
+  const abortRef                      = useRef<AbortController | null>(null);
 
-  const activeConv  = convs.find(c=>c.id===activeId);
-  const messages    = activeConv?.messages ?? [];
+  const activeConv = convs.find((c) => c.id === activeId);
+  const messages   = activeConv?.messages ?? [];
 
-  useEffect(()=>{
+  const checkHealth = useCallback(async () => {
+    try {
+      const data = await api.health();
+      setHealthData(data);
+      setOnline(true);
+    } catch {
+      setOnline(false);
+    }
+  }, []);
+
+  useEffect(() => {
     const u = getUser();
-    if(!u||!isLoggedIn()){window.location.href="/auth";return;}
+    if (!u || !isLoggedIn()) {
+      window.location.href = "/auth";
+      return;
+    }
     setUser(u);
     try {
       const saved = localStorage.getItem(`engram_convs_${u.user_id}`);
-      if(saved){const p:Conversation[]=JSON.parse(saved);setConvs(p);if(p.length>0)setActiveId(p[0].id);}
-      else{const c:Conversation={id:uid(),title:"New conversation",messages:[],createdAt:Date.now()};setConvs([c]);setActiveId(c.id);}
-    } catch{const c:Conversation={id:uid(),title:"New conversation",messages:[],createdAt:Date.now()};setConvs([c]);setActiveId(c.id);}
-    api.health().then(()=>setOnline(true)).catch(()=>setOnline(false));
-  },[]);
+      if (saved) {
+        const p: Conversation[] = JSON.parse(saved);
+        setConvs(p);
+        if (p.length > 0) setActiveId(p[0].id);
+      } else {
+        const c: Conversation = { id: uid(), title: "Welcome chat", messages: [], createdAt: Date.now() };
+        setConvs([c]);
+        setActiveId(c.id);
+      }
+    } catch {
+      const c: Conversation = { id: uid(), title: "Welcome chat", messages: [], createdAt: Date.now() };
+      setConvs([c]);
+      setActiveId(c.id);
+    }
+    checkHealth();
 
-  useEffect(()=>{messagesEnd.current?.scrollIntoView({behavior:"smooth"});},[messages]);
-  useEffect(()=>{if(!user||convs.length===0)return;localStorage.setItem(`engram_convs_${user.user_id}`,JSON.stringify(convs));},[convs,user]);
-  useEffect(()=>{if(!inputRef.current)return;inputRef.current.style.height="auto";inputRef.current.style.height=Math.min(inputRef.current.scrollHeight,160)+"px";},[input]);
+    const mq = window.matchMedia("(max-width: 768px)");
+    const apply = () => setSidebar(!mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [checkHealth]);
 
-  function newConv(initial=false){
-    const c:Conversation={id:uid(),title:"New conversation",messages:[],createdAt:Date.now()};
-    setConvs(p=>[c,...p]);setActiveId(c.id);
-    if(!initial)setTimeout(()=>inputRef.current?.focus(),50);
+  useEffect(() => {
+    messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    if (!user || convs.length === 0) return;
+    localStorage.setItem(`engram_convs_${user.user_id}`, JSON.stringify(convs));
+  }, [convs, user]);
+
+  useEffect(() => {
+    if (!inputRef.current) return;
+    inputRef.current.style.height = "auto";
+    inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 180) + "px";
+  }, [input]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setShowAddMem(false);
+      setInspectMem(null);
+      setShowOb(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function newConv(initial = false) {
+    const c: Conversation = { id: uid(), title: "New conversation", messages: [], createdAt: Date.now() };
+    setConvs((p) => [c, ...p]);
+    setActiveId(c.id);
+    setPanel("chat");
+    if (!initial) setTimeout(() => inputRef.current?.focus(), 50);
   }
-  function delConv(id:string){
-    setConvs(p=>{const n=p.filter(c=>c.id!==id);if(activeId===id)setActiveId(n[0]?.id??"");return n;});
+
+  function delConv(id: string) {
+    setConvs((p) => {
+      const n = p.filter((c) => c.id !== id);
+      if (activeId === id) setActiveId(n[0]?.id ?? "");
+      return n;
+    });
   }
-  function upd(id:string,fn:(c:Conversation)=>Conversation){setConvs(p=>p.map(c=>c.id===id?fn(c):c));}
 
-  const sendMessage = useCallback(async()=>{
-    const text=input.trim();if(!text||sending)return;
-    let cid=activeId;
-    if(!cid){const c:Conversation={id:uid(),title:titleFrom(text),messages:[],createdAt:Date.now()};setConvs(p=>[c,...p]);setActiveId(c.id);cid=c.id;}
-    const uid1=uid(),uid2=uid();
-    const userMsg:Message={id:uid1,role:"user",content:text};
-    const thinkMsg:Message={id:uid2,role:"assistant",content:"",isThinking:true};
-    upd(cid,c=>({...c,title:c.messages.length===0?titleFrom(text):c.title,messages:[...c.messages,userMsg,thinkMsg]}));
-    setInput("");setSending(true);
-    const hist=(convs.find(c=>c.id===cid)?.messages??[]).filter(m=>!m.isThinking).map(m=>({role:m.role,content:m.content}));
-    try {
-      let acc="";
-      await api.streamChat(text,hist,(tok)=>{acc+=tok;upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:acc,isThinking:false}:m)}));}).catch(async(e)=>{
-        const res=await api.chat(text,hist);
-        upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:res.response,isThinking:false,memoriesUsed:res.memories_used}:m)}));
-      });
-      await new Promise(r=>setTimeout(r,120));
-      upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:acc||m.content,isThinking:false}:m)}));
-    } catch(e){
-      upd(cid,c=>({...c,messages:c.messages.map(m=>m.id===uid2?{...m,content:friendlyError(e),isThinking:false,isError:true}:m)}));
-    } finally{setSending(false);setTimeout(()=>inputRef.current?.focus(),50);}
-  },[input,sending,activeId,convs]);
+  function clearActiveChat() {
+    if (!activeId) return;
+    if (confirm("Are you sure you want to clear messages in this chat?")) {
+      upd(activeId, (c) => ({ ...c, messages: [] }));
+    }
+  }
 
-  const handleKey=(e:React.KeyboardEvent)=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}};
+  function upd(id: string, fn: (c: Conversation) => Conversation) {
+    setConvs((p) => p.map((c) => (c.id === id ? fn(c) : c)));
+  }
 
-  const loadMems=useCallback(async()=>{
-    setLoadingMem(true);
-    try{setMemories(await api.list(200));}catch{setMemories([]);}
-    finally{setLoadingMem(false);}
-  },[]);
-  useEffect(()=>{if(panel==="memories")loadMems();},[panel,loadMems]);
-  const filteredMems=memories.filter(m=>m.content.toLowerCase().includes(memSearch.toLowerCase()));
+  const sendMessageWithText = useCallback(
+    async (rawText: string) => {
+      const text = rawText.trim();
+      if (!text || sending) return;
 
-  const saveOb=async()=>{
-    const ans=obAnswers[obStep].trim();if(!ans)return;
-    setObSaving(true);
-    try{await api.store(`${OB_QUESTIONS[obStep]}\n${ans}`,["onboarding"]);}catch{}
-    setObSaving(false);
-    if(obStep<OB_QUESTIONS.length-1)setObStep(s=>s+1);else setObDone(true);
+      let cid = activeId;
+      if (!cid) {
+        const c: Conversation = { id: uid(), title: titleFrom(text), messages: [], createdAt: Date.now() };
+        setConvs((p) => [c, ...p]);
+        setActiveId(c.id);
+        cid = c.id;
+      }
+
+      const uid1 = uid();
+      const uid2 = uid();
+      const userMsg: Message = { id: uid1, role: "user", content: text };
+      const thinkMsg: Message = { id: uid2, role: "assistant", content: "", isThinking: true };
+
+      upd(cid, (c) => ({
+        ...c,
+        title: c.messages.length === 0 ? titleFrom(text) : c.title,
+        messages: [...c.messages, userMsg, thinkMsg],
+      }));
+
+      setInput("");
+      setSending(true);
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+      const signal = abortRef.current.signal;
+
+      const hist = (convs.find((c) => c.id === cid)?.messages ?? [])
+        .filter((m) => !m.isThinking)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      let acc = "";
+      try {
+        let usedCount: number | undefined = undefined;
+
+        await api
+          .streamChat(
+            text,
+            hist,
+            (tok) => {
+              acc += tok;
+              upd(cid, (c) => ({
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === uid2 ? { ...m, content: acc, isThinking: false, memoriesUsed: usedCount } : m
+                ),
+              }));
+            },
+            (info) => {
+              usedCount = info.memoriesUsed;
+              upd(cid, (c) => ({
+                ...c,
+                messages: c.messages.map((m) => (m.id === uid2 ? { ...m, memoriesUsed: usedCount } : m)),
+              }));
+            },
+            signal
+          )
+          .catch(async (err) => {
+            if ((err as { name?: string })?.name === "AbortError") throw err;
+            const res = await api.chat(text, hist);
+            upd(cid, (c) => ({
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === uid2 ? { ...m, content: res.response, isThinking: false, memoriesUsed: res.memories_used } : m
+              ),
+            }));
+          });
+
+        await new Promise((r) => setTimeout(r, 80));
+        upd(cid, (c) => ({
+          ...c,
+          messages: c.messages.map((m) =>
+            m.id === uid2 ? { ...m, content: acc || m.content, isThinking: false, memoriesUsed: usedCount ?? m.memoriesUsed } : m
+          ),
+        }));
+        checkHealth();
+      } catch (e) {
+        if ((e as { name?: string })?.name === "AbortError") {
+          upd(cid, (c) => ({
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === uid2 ? { ...m, isThinking: false, content: acc || m.content || "Stopped." } : m
+            ),
+          }));
+        } else {
+          upd(cid, (c) => ({
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === uid2 ? { ...m, content: friendlyError(e), isThinking: false, isError: true } : m
+            ),
+          }));
+        }
+      } finally {
+        abortRef.current = null;
+        setSending(false);
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+    },
+    [sending, activeId, convs, checkHealth]
+  );
+
+  const sendMessage = useCallback(() => {
+    sendMessageWithText(input);
+  }, [input, sendMessageWithText]);
+
+  function stopSending() {
+    abortRef.current?.abort();
+  }
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const loadMems = useCallback(async () => {
+    setLoadingMem(true);
+    try {
+      const data = await api.list(200);
+      setMemories(data);
+    } catch {
+      setMemories([]);
+    } finally {
+      setLoadingMem(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (panel === "vault" || panel === "graph") loadMems();
+    if (panel === "graph") checkHealth();
+  }, [panel, loadMems, checkHealth]);
+
+  const handleCreateMemory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemText.trim() || savingMem) return;
+    setSavingMem(true);
+    try {
+      const tags = newMemTags
+        .split(",")
+        .map((t) => t.trim().replace(/^#/, ""))
+        .filter(Boolean);
+      await api.store(newMemText.trim(), tags);
+      setNewMemText("");
+      setNewMemTags("");
+      setShowAddMem(false);
+      await loadMems();
+      await checkHealth();
+    } catch (err) {
+      alert(friendlyError(err));
+    } finally {
+      setSavingMem(false);
+    }
+  };
+
+  const openLineage = async (m: Memory) => {
+    setInspectMem(m);
+    setLoadingHist(true);
+    try {
+      const res = await api.history(m.id);
+      setMemHistory(res.history || []);
+    } catch {
+      setMemHistory([]);
+    } finally {
+      setLoadingHist(false);
+    }
+  };
+
+  const allTags = Array.from(
+    new Set(memories.flatMap((m) => m.tags || []).filter(Boolean))
+  );
+
+  const filteredMems = memories.filter((m) => {
+    const matchesSearch =
+      m.content.toLowerCase().includes(memSearch.toLowerCase()) ||
+      (m.tags && m.tags.some((t) => t.toLowerCase().includes(memSearch.toLowerCase())));
+    const matchesTag = selectedTag === "all" || (m.tags && m.tags.includes(selectedTag));
+    return matchesSearch && matchesTag;
+  });
+
+  const filteredConvs = convs.filter((c) =>
+    c.title.toLowerCase().includes(searchConv.toLowerCase())
+  );
+
+  const saveOb = async () => {
+    const ans = obAnswers[obStep].trim();
+    if (!ans) return;
+    setObSaving(true);
+    try {
+      await api.store(`${OB_QUESTIONS[obStep]}\n${ans}`, ["onboarding"]);
+    } catch {}
+    setObSaving(false);
+    if (obStep < OB_QUESTIONS.length - 1) setObStep((s) => s + 1);
+    else {
+      setObDone(true);
+      checkHealth();
+    }
+  };
+
+  function selectPanel(id: Panel) {
+    setPanel(id);
+    if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
+  }
+
+  async function deleteMemory(id: string) {
+    if (!confirm("Delete this memory from graph?")) return;
+    try {
+      await api.delete(id);
+      setMemories((p) => p.filter((x) => x.id !== id));
+      checkHealth();
+    } catch (err) {
+      alert(friendlyError(err));
+    }
+  }
+
   return (
-    <div style={{display:"flex",height:"100vh",background:"var(--bg)",color:"var(--text)",overflow:"hidden",fontFamily:"'Geist',sans-serif"}}>
-      <aside style={{
-        width:sidebarOpen?260:0,flexShrink:0,overflow:"hidden",
-        borderRight:sidebarOpen?"1px solid var(--border)":"none",
-        display:"flex",flexDirection:"column",
-        transition:"width 0.2s ease",background:"var(--bg)"
-      }}>
-        <div style={{padding:"12px 16px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/><path d="M2 18a10 10 0 0 1 20 0"/>
-            </svg>
-            <span style={{fontSize:14,fontWeight:600,letterSpacing:"-0.3px"}}>Engram</span>
-          </div>
-          <button onClick={()=>newConv()} title="New chat" style={{width:28,height:28,borderRadius:8,border:"1px solid var(--border)",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text-2)"}}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
-        </div>
+    <div className="flex h-screen bg-bg text-txt overflow-hidden font-sans antialiased">
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          className="fixed inset-0 bg-black/55 z-20 md:hidden"
+          onClick={() => setSidebar(false)}
+        />
+      )}
 
-        <div style={{display:"flex",gap:4,padding:"8px 12px",flexShrink:0}}>
-          {(["chat","memories"] as Panel[]).map(p=>(
-            <button key={p} onClick={()=>setPanel(p)} style={{
-              flex:1,padding:"6px 0",fontSize:12,fontWeight:500,borderRadius:8,border:"none",cursor:"pointer",
-              background:panel===p?"var(--bg-3)":"transparent",
-              color:panel===p?"var(--text)":"var(--text-3)",transition:"all 0.15s"
-            }}>{p==="chat"?"Chats":"Memories"}</button>
-          ))}
-        </div>
-
-        <div style={{flex:1,overflowY:"auto",padding:"0 8px 8px"}}>
-          {panel==="chat"&&(
-            <div style={{display:"flex",flexDirection:"column",gap:2}}>
-              {convs.length===0&&<p style={{textAlign:"center",color:"var(--text-3)",fontSize:12,padding:"32px 0"}}>No conversations yet</p>}
-              {convs.map(conv=>(
-                <div key={conv.id} onClick={()=>setActiveId(conv.id)} style={{
-                  display:"flex",alignItems:"center",justifyContent:"space-between",
-                  padding:"10px 12px",borderRadius:10,cursor:"pointer",
-                  background:activeId===conv.id?"var(--bg-3)":"transparent",
-                  border:activeId===conv.id?"1px solid var(--border)":"1px solid transparent",
-                  transition:"all 0.1s"
-                }} className="group">
-                  <div style={{minWidth:0,flex:1}}>
-                    <p style={{fontSize:12,fontWeight:500,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:activeId===conv.id?"var(--text)":"var(--text-2)"}}>{conv.title}</p>
-                    <p style={{fontSize:10,color:"var(--text-3)",marginTop:2}}>{conv.messages.filter(m=>m.role==="user").length} messages</p>
-                  </div>
-                  <button onClick={e=>{e.stopPropagation();delConv(conv.id);}} style={{
-                    width:20,height:20,borderRadius:6,border:"none",background:"transparent",cursor:"pointer",
-                    display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text-3)",opacity:0,transition:"opacity 0.15s",flexShrink:0,marginLeft:4
-                  }} onMouseEnter={e=>(e.currentTarget.style.opacity="1")} onMouseLeave={e=>(e.currentTarget.style.opacity="0")}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          {panel==="memories"&&(
-            <div>
-              <div style={{position:"relative",marginBottom:8}}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}>
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      {/* SIDEBAR */}
+      <aside
+        className={`fixed md:static inset-y-0 left-0 flex flex-col bg-[#0b0d14] border-r border-white/[0.07] transition-all duration-200 shrink-0 z-30 ${
+          sidebarOpen ? "w-[280px] translate-x-0" : "-translate-x-full w-[280px] md:translate-x-0 md:w-0 md:overflow-hidden md:border-none"
+        }`}
+      >
+        {/* Brand Header */}
+        <div className="p-3.5 px-4 border-b border-white/[0.07] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 p-[1px] shadow-sm">
+              <div className="w-full h-full bg-[#0d0f17] rounded-[7px] flex items-center justify-center">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-indigo-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>
+                  <path d="M2 18a10 10 0 0 1 20 0"/>
                 </svg>
-                <input value={memSearch} onChange={e=>setMemSearch(e.target.value)} placeholder="Search memories…" style={{
-                  width:"100%",background:"var(--bg-3)",border:"1px solid transparent",borderRadius:10,padding:"7px 10px 7px 28px",fontSize:12,color:"var(--text)",outline:"none",boxSizing:"border-box"
-                }}/>
-              </div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 4px",marginBottom:6}}>
-                  <span style={{fontSize:10,color:"var(--text-3)"}}>{memSearch?`${filteredMems.length} of ${memories.length} memories`:`${memories.length} memories`}</span>
-                <button onClick={loadMems} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text-3)",display:"flex",padding:2}}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={loadingMem?{animation:"spin 1.5s linear infinite"}:{}}>
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>
-                  </svg>
-                </button>
-              </div>
-              {loadingMem&&<p style={{textAlign:"center",color:"var(--text-3)",fontSize:12,padding:"24px 0"}}>Loading…</p>}
-              {!loadingMem&&filteredMems.length===0&&<p style={{textAlign:"center",color:"var(--text-3)",fontSize:12,padding:"24px 0"}}>{memSearch?"No matches":"No memories yet"}</p>}
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                {filteredMems.map(m=>(
-                  <div key={m.id} style={{background:"var(--bg-3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px"}}
-                    onMouseEnter={e=>(e.currentTarget.style.borderColor="var(--border-2)")}
-                    onMouseLeave={e=>(e.currentTarget.style.borderColor="var(--border)")}>
-                    <p style={{fontSize:11,color:"var(--text-2)",lineHeight:1.6,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{m.content}</p>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6}}>
-                      <span style={{fontSize:10,color:"var(--text-3)"}}>{m.created_at?timeAgo(m.created_at):""}</span>
-                      <button onClick={async()=>{try{await api.delete(m.id);setMemories(p=>p.filter(x=>x.id!==m.id));}catch{}}}
-                        style={{background:"none",border:"none",cursor:"pointer",color:"var(--text-3)",fontSize:10,padding:0}}
-                        onMouseEnter={e=>(e.currentTarget.style.color="var(--red)")} onMouseLeave={e=>(e.currentTarget.style.color="var(--text-3)")}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
-          )}
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold tracking-tight text-white font-sans">Engram</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-accent-3 border border-indigo-500/20">PRO</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => newConv()}
+            title="New Chat"
+            className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/[0.06] text-txt-2 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
         </div>
 
-        <div style={{flexShrink:0,borderTop:"1px solid var(--border)",padding:"8px 12px"}}>
-          <button onClick={()=>setShowOb(true)} style={{width:"100%",padding:"8px 12px",borderRadius:10,border:"none",background:"transparent",cursor:"pointer",textAlign:"left",fontSize:12,color:"var(--text-2)",display:"flex",alignItems:"center",gap:8}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="var(--bg-3)";(e.currentTarget as HTMLElement).style.color="var(--text)";}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color="var(--text-2)";}}>
-            ✦ Setup memories
-          </button>
-          {user&&(
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-                <div style={{width:22,height:22,borderRadius:"50%",background:"rgba(124,107,255,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <span style={{fontSize:10,color:"var(--accent)",fontWeight:600}}>{user.username[0].toUpperCase()}</span>
+        {/* View Switcher Pills */}
+        <div className="p-2.5 px-3 shrink-0">
+          <div className="flex p-1 bg-black/40 border border-white/[0.06] rounded-xl">
+            {(
+              [
+                { id: "chat", label: "Chats", icon: "💬" },
+                { id: "vault", label: "Vault", icon: "🧠" },
+                { id: "graph", label: "Graph", icon: "🕸️" },
+              ] as { id: Panel; label: string; icon: string }[]
+            ).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => selectPanel(t.id)}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  panel === t.id
+                    ? "bg-[#181d2a] text-white shadow-sm border border-white/[0.08]"
+                    : "text-txt-3 hover:text-txt-2"
+                }`}
+              >
+                <span>{t.icon}</span>
+                <span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Conversation list — always visible so vault/graph don't hide chats */}
+        <div className="flex-1 overflow-y-auto px-3 pb-3">
+            <div className="space-y-1">
+              {(convs.length > 2 || searchConv) && (
+                <div className="relative mb-2 px-1">
+                  <input
+                    type="text"
+                    value={searchConv}
+                    onChange={(e) => setSearchConv(e.target.value)}
+                    placeholder="Search chats…"
+                    className="w-full bg-[#11141c] border border-white/[0.06] focus:border-indigo-500/50 rounded-lg px-2.5 py-1.5 text-xs text-txt placeholder:text-txt-4 outline-none transition-all"
+                  />
                 </div>
-                <span style={{fontSize:12,color:"var(--text-2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.username}</span>
+              )}
+
+              {filteredConvs.length === 0 && (
+                <div className="text-center text-txt-3 text-xs py-8">No conversations yet</div>
+              )}
+
+              {filteredConvs.map((conv) => {
+                const isActive = activeId === conv.id && panel === "chat";
+                const userMsgCount = conv.messages.filter((m) => m.role === "user").length;
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => {
+                      setActiveId(conv.id);
+                      selectPanel("chat");
+                    }}
+                    className={`group relative flex items-center justify-between p-2.5 px-3 rounded-xl cursor-pointer transition-all border ${
+                      isActive
+                        ? "bg-[#141824] border-indigo-500/30 text-white shadow-sm"
+                        : "bg-transparent hover:bg-white/[0.03] border-transparent text-txt-2"
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1 pr-2">
+                      <p className={`text-xs font-medium truncate ${isActive ? "text-white" : "text-txt-2 group-hover:text-txt"}`}>
+                        {conv.title || "New conversation"}
+                      </p>
+                      <p className="text-[10px] text-txt-3 mt-0.5 flex items-center gap-1.5">
+                        <span>{userMsgCount} msg{userMsgCount === 1 ? "" : "s"}</span>
+                        <span>·</span>
+                        <span>{conv.createdAt ? timeAgo(new Date(conv.createdAt).toISOString()) : "recent"}</span>
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        delConv(conv.id);
+                      }}
+                      title="Delete chat"
+                      className="w-6 h-6 rounded-md hover:bg-red-500/20 text-txt-3 hover:text-red-300 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all shrink-0"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+        </div>
+
+        {/* SIDEBAR FOOTER */}
+        <div className="p-3 border-t border-white/[0.07] shrink-0 space-y-2 bg-[#0d0f17]">
+          <button
+            onClick={() => setShowOb(true)}
+            className="w-full py-2 px-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.05] text-txt-2 hover:text-white text-xs font-medium flex items-center justify-between transition-all cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5">
+              <span>✦</span>
+              <span>Memory Wizard</span>
+            </span>
+            <span className="text-[10px] text-txt-3 font-mono">10 Qs</span>
+          </button>
+
+          {user && (
+            <div className="flex items-center justify-between pt-1 px-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold shrink-0 shadow-sm">
+                  {user.username?.[0]?.toUpperCase() ?? "U"}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-txt truncate">{user.username}</p>
+                  <p className="text-[10px] text-txt-3 truncate">{user.email || "Active User"}</p>
+                </div>
               </div>
-              <button onClick={logout} style={{fontSize:11,color:"var(--text-3)",background:"none",border:"none",cursor:"pointer",flexShrink:0}}
-                onMouseEnter={e=>(e.currentTarget.style.color="var(--red)")} onMouseLeave={e=>(e.currentTarget.style.color="var(--text-3)")}>
-                Sign out
+
+              <button
+                onClick={logout}
+                title="Sign out"
+                className="p-1.5 rounded-lg hover:bg-red-500/10 text-txt-3 hover:text-red-400 transition-colors cursor-pointer"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
               </button>
             </div>
           )}
         </div>
       </aside>
 
-      <main style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,minHeight:0}}>
-        <div style={{padding:"10px 16px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <button onClick={()=>setSidebar(s=>!s)} style={{width:30,height:30,borderRadius:8,border:"1px solid var(--border)",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text-2)"}}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                {sidebarOpen?<path d="M15 18l-6-6 6-6"/>:<path d="M3 6h18M3 12h18M3 18h18"/>}
+      {/* MAIN CHAT AREA */}
+      <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-bg relative">
+        {/* Top Navbar */}
+        <header className="h-14 border-b border-white/[0.07] px-4 flex items-center justify-between shrink-0 glass-panel">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setSidebar((s) => !s)}
+              className="w-8 h-8 rounded-lg hover:bg-white/[0.06] border border-white/[0.06] text-txt-2 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                {sidebarOpen ? <path d="M15 18l-6-6 6-6" /> : <path d="M3 6h18M3 12h18M3 18h18" />}
               </svg>
             </button>
-            <span style={{fontSize:13,color:"var(--text-2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:300}}>{activeConv?.title??"Engram"}</span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{width:6,height:6,borderRadius:"50%",background:online===null?"var(--text-3)":online?"var(--green)":"var(--red)",display:"inline-block"}}/>
-            <span style={{fontSize:11,color:"var(--text-3)"}}>{online===null?"connecting":online?"online":"offline"}</span>
-          </div>
-        </div>
 
-        <div style={{flex:1,overflowY:"auto",overflowAnchor:"none"}}>
-          <div style={{maxWidth:720,margin:"0 auto",padding:"32px 24px"}}>
-            {messages.length===0&&(
-              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"55vh",textAlign:"center",animation:"fadeIn 0.3s ease forwards"}}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1" strokeLinecap="round" style={{opacity:0.3,marginBottom:20}}>
-                  <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/><path d="M2 18a10 10 0 0 1 20 0"/>
-                </svg>
-                <h2 style={{fontSize:20,fontWeight:600,marginBottom:8}}>Hello{user?`, ${user.username}`:""}</h2>
-                <p style={{fontSize:14,color:"var(--text-2)",maxWidth:380,lineHeight:1.7}}>Your memories are recalled automatically. Ask me anything.</p>
+            <div className="min-w-0">
+              <h1 className="text-xs font-semibold text-white truncate font-sans">
+                {panel === "vault"
+                  ? "Memory Vault"
+                  : panel === "graph"
+                  ? "Knowledge Graph"
+                  : activeConv?.title || "Engram Intelligence"}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] text-[11px] text-txt-3">
+              <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400 animate-pulse-dot" : "bg-red-400"}`} />
+              <span>{online ? "Graph Connected" : "Connecting API"}</span>
+              {healthData?.graph?.nodes !== undefined && (
+                <>
+                  <span>·</span>
+                  <span className="font-mono text-txt-2">{healthData.graph.nodes} nodes</span>
+                </>
+              )}
+            </div>
+
+            {panel === "chat" && messages.length > 0 && (
+              <button
+                onClick={clearActiveChat}
+                title="Clear current conversation"
+                className="text-xs text-txt-3 hover:text-txt-2 px-2.5 py-1 rounded-lg hover:bg-white/[0.05] transition-all cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowAddMem(true)}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            >
+              <span>+</span>
+              <span>Remember</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Messages Stream Container */}
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          {panel === "vault" && (
+            <div className="max-w-4xl mx-auto animate-fade-in space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <input
+                  type="text"
+                  value={memSearch}
+                  onChange={(e) => setMemSearch(e.target.value)}
+                  placeholder="Search memory vault…"
+                  className="flex-1 bg-[#11141c] border border-white/[0.07] focus:border-indigo-500/50 rounded-xl px-3.5 py-2.5 text-sm text-txt placeholder:text-txt-4 outline-none"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={loadMems}
+                    className="px-3 py-2 text-xs rounded-xl border border-white/[0.07] text-txt-2 hover:text-white hover:bg-white/[0.04]"
+                  >
+                    {loadingMem ? "Syncing…" : "Refresh"}
+                  </button>
+                  <button
+                    onClick={() => setShowAddMem(true)}
+                    className="px-3.5 py-2 text-xs font-medium rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+                  >
+                    + Add memory
+                  </button>
+                </div>
+              </div>
+
+              {allTags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setSelectedTag("all")}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
+                      selectedTag === "all"
+                        ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                        : "bg-white/[0.03] text-txt-3 hover:text-txt-2 border border-transparent"
+                    }`}
+                  >
+                    All ({memories.length})
+                  </button>
+                  {allTags.map((tag) => (
+                    <button
+                      key={tag}
+                      onClick={() => setSelectedTag(tag)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
+                        selectedTag === tag
+                          ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                          : "bg-white/[0.03] text-txt-3 hover:text-txt-2 border border-transparent"
+                      }`}
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {!loadingMem && filteredMems.length === 0 && (
+                <div className="text-center py-20">
+                  <p className="text-sm font-medium text-white mb-1">
+                    {memSearch ? "No matches in vault" : "No memories saved yet"}
+                  </p>
+                  <p className="text-xs text-txt-3 mb-4">
+                    Teach Engram a fact and it will show up here with tags and lineage.
+                  </p>
+                  <button
+                    onClick={() => setShowAddMem(true)}
+                    className="text-xs text-indigo-300 hover:text-white"
+                  >
+                    Add your first memory →
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {filteredMems.map((m) => (
+                  <div
+                    key={m.id}
+                    className="p-4 bg-[#11141d] hover:bg-[#151924] border border-white/[0.06] hover:border-white/[0.12] rounded-2xl transition-all space-y-3 group"
+                  >
+                    <p className="text-sm text-txt leading-relaxed font-sans">{m.content}</p>
+                    {m.tags && m.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {m.tags.map((t) => (
+                          <span
+                            key={t}
+                            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                          >
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-1 border-t border-white/[0.04] text-[11px] text-txt-3">
+                      <span>{m.created_at ? timeAgo(m.created_at) : "stored"}</span>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => openLineage(m)} className="hover:text-indigo-300 cursor-pointer">
+                          Lineage
+                        </button>
+                        <button onClick={() => deleteMemory(m.id)} className="hover:text-red-400 cursor-pointer">
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {panel === "graph" && (
+            <div className="max-w-4xl mx-auto animate-fade-in space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: "Entities", value: healthData?.graph?.nodes ?? memories.length },
+                  { label: "Relations", value: healthData?.graph?.edges ?? 0 },
+                  { label: "Updates", value: healthData?.graph?.updates ?? 0 },
+                  { label: "Extends", value: healthData?.graph?.extends ?? 0 },
+                ].map((stat) => (
+                  <div key={stat.label} className="bg-[#11141e] border border-white/[0.07] rounded-xl p-3 text-center">
+                    <p className="text-lg font-bold font-mono text-white">{stat.value}</p>
+                    <p className="text-[10px] uppercase tracking-wider text-txt-3 mt-0.5">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-txt-3 px-1">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400" : "bg-red-400"}`} />
+                  {online ? "Graph online" : "API offline"}
+                  {healthData?.model ? ` · ${healthData.model}` : ""}
+                </span>
+                <span>Click a node to inspect lineage</span>
+              </div>
+
+              <KnowledgeGraphView memories={filteredMems} onOpen={openLineage} />
+
+              <div className="p-4 bg-gradient-to-br from-indigo-950/20 to-purple-950/20 border border-indigo-500/20 rounded-2xl">
+                <h4 className="text-xs font-semibold text-indigo-300 mb-1">Temporal Knowledge Graph</h4>
+                <p className="text-[12px] text-txt-3 leading-relaxed">
+                  Facts cluster by tag around you. Updates replace stale nodes, extends keep both, and derivations link related topics — older versions stay in lineage.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {panel === "chat" && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* EMPTY STATE / WELCOME HERO */}
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center min-h-[56vh] text-center max-w-xl mx-auto animate-fade-in py-8">
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-full" />
+                  <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 p-[1px] shadow-xl shadow-indigo-500/20">
+                    <div className="w-full h-full bg-[#0c0e16] rounded-[15px] flex items-center justify-center">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-indigo-400" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>
+                        <path d="M2 18a10 10 0 0 1 20 0"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <h2 className="text-2xl font-bold tracking-tight text-white mb-2 font-sans">
+                  Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}
+                  {user?.username ? `, ${user.username}` : ""}
+                </h2>
+                <p className="text-sm text-txt-3 max-w-md leading-relaxed mb-8">
+                  Your persistent AI memory vault is ready. Ask questions, explore what is remembered, or save new knowledge.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
+                  {PROMPT_STARTERS.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => sendMessageWithText(item.prompt)}
+                      className="p-3.5 rounded-xl bg-[#11141e] hover:bg-[#161a28] border border-white/[0.06] hover:border-indigo-500/30 transition-all text-left group cursor-pointer shadow-sm"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-base">{item.icon}</span>
+                        <span className="text-xs font-semibold text-white group-hover:text-indigo-300 transition-colors">
+                          {item.title}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-txt-3 line-clamp-2 leading-relaxed">
+                        {item.prompt}
+                      </p>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
-            <div style={{display:"flex",flexDirection:"column",gap:24}}>
-              {messages.map(msg=>(
-                <div key={msg.id} style={{display:"flex",justifyContent:msg.role==="user"?"flex-end":"flex-start",animation:"fadeIn 0.2s ease forwards"}}>
-                  {msg.role==="user"?(
-                    <div style={{maxWidth:"75%",background:"var(--bg-3)",border:"1px solid var(--border)",borderRadius:"18px 18px 4px 18px",padding:"12px 16px"}}>
-                      <p style={{fontSize:14,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{msg.content}</p>
+
+            {/* MESSAGES LIST */}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex gap-3 animate-fade-in ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {msg.role === "assistant" && (
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-indigo-400" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>
+                      <path d="M2 18a10 10 0 0 1 20 0"/>
+                    </svg>
+                  </div>
+                )}
+
+                <div className={`max-w-[85%] ${msg.role === "user" ? "max-w-[78%]" : "flex-1 min-w-0"}`}>
+                  {msg.role === "assistant" && !msg.isThinking && msg.memoriesUsed !== undefined && msg.memoriesUsed > 0 && (
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[10px] font-mono mb-2 shadow-sm">
+                      <span className="text-indigo-400">⚡</span>
+                      <span>{msg.memoriesUsed} memor{msg.memoriesUsed === 1 ? "y" : "ies"} recalled for context</span>
                     </div>
-                  ):(
-                    <div style={{maxWidth:"88%",width:"100%"}}>
-                      <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                        <div style={{width:26,height:26,borderRadius:"50%",background:"rgba(124,107,255,0.1)",border:"1px solid rgba(124,107,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round">
-                            <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/><path d="M2 18a10 10 0 0 1 20 0"/>
-                          </svg>
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          {msg.isThinking?<ThinkingDots/>:
-                           msg.isError?(
-                             <div style={{display:"flex",gap:8,color:"var(--amber)"}}>
-                               <span style={{flexShrink:0,marginTop:1}}>⚠</span>
-                               <p style={{fontSize:14,lineHeight:1.7}}>{msg.content}</p>
-                             </div>
-                           ):(
-                             <div className="prose" style={{fontSize:14,lineHeight:1.75,color:"var(--text)"}}
-                               dangerouslySetInnerHTML={{__html:`<p>${renderMd(msg.content)}</p>`}}/>
-                           )}
-                          {!msg.isThinking&&!msg.isError&&msg.memoriesUsed!==undefined&&msg.memoriesUsed>0&&(
-                            <details style={{marginTop:8}}>
-                              <summary style={{fontSize:10,color:"var(--text-3)",cursor:"pointer",userSelect:"none"}}>
-                                {msg.memoriesUsed} memor{msg.memoriesUsed===1?"y":"ies"} used
-                              </summary>
-                              {/* Placeholder: the backend currently returns only the count
-                                  (memories_used). Per-memory ids are not surfaced yet, so we
-                                  can't list the specific memories here. No new endpoint is
-                                  added in this change; swap this note for the real list once
-                                  stream_chat_complete/chat return the recalled memory ids. */}
-                              <p style={{fontSize:10,color:"var(--text-3)",marginTop:6,lineHeight:1.6}}>
-                                Memory details are not returned by the backend yet — only the count above.
-                              </p>
-                            </details>
-                          )}
-                        </div>
+                  )}
+
+                  <div
+                    className={`rounded-2xl p-4 text-sm leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-[#181c28] border border-white/[0.1] text-txt rounded-br-sm shadow-md font-sans select-text whitespace-pre-wrap"
+                        : "bg-[#10131c] border border-white/[0.06] text-txt rounded-tl-sm shadow-sm select-text"
+                    }`}
+                  >
+                    {msg.isThinking ? (
+                      <ThinkingDots />
+                    ) : msg.isError ? (
+                      <div className="flex items-start gap-2 text-amber-300 text-xs">
+                        <span className="font-bold">⚠</span>
+                        <p>{msg.content}</p>
                       </div>
+                    ) : msg.role === "user" ? (
+                      msg.content
+                    ) : (
+                      <div
+                        className="prose"
+                        dangerouslySetInnerHTML={{ __html: `<p>${renderMd(msg.content)}</p>` }}
+                      />
+                    )}
+                  </div>
+
+                  {msg.role === "assistant" && !msg.isThinking && !msg.isError && (
+                    <div className="flex items-center gap-3 mt-1.5 px-1 text-[11px] text-txt-3">
+                      <button
+                        onClick={() => copyToClipboard(msg.content, msg.id)}
+                        className="hover:text-txt-2 flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <span className="text-emerald-400">✓</span>
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-            <div ref={messagesEnd} style={{height:16}}/>
+              </div>
+            ))}
+            <div ref={messagesEnd} className="h-6" />
           </div>
+          )}
         </div>
 
-        <div style={{flexShrink:0,padding:"12px 24px 20px"}}>
-          <div style={{maxWidth:720,margin:"0 auto"}}>
-            <div style={{display:"flex",alignItems:"flex-end",gap:12,background:"var(--bg-2)",border:"1px solid var(--border)",borderRadius:20,padding:"12px 16px",transition:"border-color 0.15s"}}
-              onFocus={e=>(e.currentTarget.style.borderColor="var(--border-2)")} onBlur={e=>(e.currentTarget.style.borderColor="var(--border)")}>
-              <textarea ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKey}
-                placeholder="Message Engram…" rows={1} disabled={sending}
-                style={{flex:1,background:"transparent",border:"none",outline:"none",resize:"none",fontSize:14,lineHeight:1.65,color:"var(--text)",fontFamily:"inherit",minHeight:24,maxHeight:160,overflow:"auto"}}/>
-              <button onClick={sendMessage} disabled={!input.trim()||sending} style={{
-                width:34,height:34,borderRadius:12,border:"none",cursor:input.trim()&&!sending?"pointer":"default",flexShrink:0,
-                background:input.trim()&&!sending?"var(--accent)":"var(--bg-4)",
-                display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",opacity:!input.trim()||sending?0.35:1
-              }}>
-                {sending?(
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" style={{animation:"spin 1.5s linear infinite"}}>
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        {/* BOTTOM COMPOSER */}
+        {panel === "chat" && (
+        <div className="p-4 pt-2 shrink-0 max-w-3xl w-full mx-auto">
+          <div className="glass-card rounded-2xl p-2.5 px-3 border border-white/[0.09] focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/10 transition-all shadow-xl">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Ask Engram anything, or teach it a new memory…"
+              rows={1}
+              disabled={sending}
+              className="w-full bg-transparent border-none outline-none resize-none text-sm text-txt placeholder:text-txt-4 font-sans leading-relaxed min-h-[28px] max-h-[160px] overflow-y-auto px-1 pt-1"
+            />
+
+            <div className="flex items-center justify-between mt-2 pt-1 border-t border-white/[0.04]">
+              <div className="flex items-center gap-2 text-[10px] text-txt-3">
+                <span className="hidden sm:inline">Return to send · Shift+Return for newline</span>
+              </div>
+
+              {sending ? (
+                <button
+                  type="button"
+                  onClick={stopSending}
+                  className="h-8 px-3 rounded-xl bg-white/[0.06] border border-white/[0.1] text-xs text-txt-2 hover:text-white cursor-pointer"
+                >
+                  Stop
+                </button>
+              ) : (
+              <button
+                onClick={sendMessage}
+                disabled={!input.trim()}
+                className="w-8 h-8 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-30 text-white flex items-center justify-center transition-all shadow-md shadow-indigo-600/20 active:scale-95 disabled:cursor-not-allowed cursor-pointer"
+              >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
                   </svg>
-                ):(
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/>
-                  </svg>
-                )}
               </button>
+              )}
             </div>
-            <p style={{textAlign:"center",fontSize:10,color:"var(--text-3)",marginTop:8}}>
-              Enter to send · Shift+Enter for newline
-            </p>
           </div>
         </div>
+        )}
       </main>
 
-      {showOb&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}
-          onClick={e=>{if(e.target===e.currentTarget)setShowOb(false);}}>
-          <div style={{background:"var(--bg-2)",border:"1px solid var(--border)",borderRadius:20,width:"100%",maxWidth:480,animation:"fadeIn 0.2s ease forwards",overflow:"hidden"}}>
-            {obDone?(
-              <div style={{padding:40,textAlign:"center"}}>
-                <div style={{fontSize:28,marginBottom:16}}>✓</div>
-                <h3 style={{fontSize:16,fontWeight:600,marginBottom:8}}>Memory seeded</h3>
-                <p style={{fontSize:13,color:"var(--text-2)",lineHeight:1.65,marginBottom:24}}>Engram now knows you. Your memories will be recalled automatically.</p>
-                <button onClick={()=>{setShowOb(false);setObDone(false);setObStep(0);}} style={{padding:"10px 24px",background:"var(--accent)",border:"none",borderRadius:12,color:"white",fontSize:13,fontWeight:500,cursor:"pointer"}}>
-                  Start chatting
+      {/* QUICK ADD MEMORY MODAL */}
+      {showAddMem && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-card bg-[#0e111a] rounded-2xl w-full max-w-lg border border-white/[0.1] shadow-2xl p-6 relative">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🧠</span>
+                <h3 className="text-sm font-bold text-white">Add to Memory Vault</h3>
+              </div>
+              <button
+                onClick={() => setShowAddMem(false)}
+                className="text-txt-3 hover:text-white text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateMemory} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-medium text-txt-3 uppercase tracking-wider mb-1.5">
+                  Fact / Memory Content
+                </label>
+                <textarea
+                  value={newMemText}
+                  onChange={(e) => setNewMemText(e.target.value)}
+                  placeholder="e.g., I live in Seattle, prefer TypeScript over Python, and run 5k on Tuesday mornings."
+                  required
+                  rows={4}
+                  className="w-full bg-[#141724] border border-white/[0.08] focus:border-indigo-500/60 rounded-xl p-3 text-xs text-txt placeholder:text-txt-4 outline-none resize-none leading-relaxed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-txt-3 uppercase tracking-wider mb-1.5">
+                  Tags (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={newMemTags}
+                  onChange={(e) => setNewMemTags(e.target.value)}
+                  placeholder="profile, tech, routine"
+                  className="w-full bg-[#141724] border border-white/[0.08] focus:border-indigo-500/60 rounded-xl p-2.5 text-xs text-txt placeholder:text-txt-4 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMem(false)}
+                  className="px-4 py-2 text-xs text-txt-2 hover:text-white rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMem || !newMemText.trim()}
+                  className="px-5 py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-40 transition-all cursor-pointer"
+                >
+                  {savingMem ? "Indexing Fact…" : "Save to Graph →"}
                 </button>
               </div>
-            ):(
-              <div style={{padding:24}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-                  <div>
-                    <h3 style={{fontSize:14,fontWeight:600}}>Setup memories</h3>
-                    <p style={{fontSize:11,color:"var(--text-3)",marginTop:2}}>Question {obStep+1} of {OB_QUESTIONS.length}</p>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TEMPORAL LINEAGE / INSPECT MODAL (HydraDB feature) */}
+      {inspectMem && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-card bg-[#0e111a] rounded-2xl w-full max-w-lg border border-white/[0.1] shadow-2xl p-6 relative max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.07] shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🕸️</span>
+                <h3 className="text-sm font-bold text-white">Temporal Fact Lineage</h3>
+              </div>
+              <button
+                onClick={() => setInspectMem(null)}
+                className="text-txt-3 hover:text-white text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              <div className="p-3.5 bg-[#141724] rounded-xl border border-indigo-500/20">
+                <span className="text-[10px] text-indigo-400 font-mono uppercase tracking-wider block mb-1">Active Memory Node</span>
+                <p className="text-xs text-txt leading-relaxed font-sans">{inspectMem.content}</p>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold text-txt-2 uppercase tracking-wider mb-2">Supersession History</h4>
+                {loadingHistory ? (
+                  <p className="text-xs text-txt-3 py-4 text-center">Tracing graph lineage…</p>
+                ) : memHistory.length === 0 ? (
+                  <p className="text-xs text-txt-3 py-4 text-center">This is an original root fact (no previous superseded versions).</p>
+                ) : (
+                  <div className="space-y-2 border-l-2 border-indigo-500/30 pl-3 ml-2">
+                    {memHistory.map((item, idx) => (
+                      <div key={idx} className="bg-[#121520] p-3 rounded-xl border border-white/[0.05] space-y-1">
+                        <div className="flex items-center justify-between text-[10px] text-txt-3">
+                          <span className="font-mono text-indigo-300">v{item.version || idx + 1}</span>
+                          <span>{item.created_at ? timeAgo(item.created_at) : ""}</span>
+                        </div>
+                        <p className="text-xs text-txt-2">{item.content}</p>
+                        {item.supersession_reason && (
+                          <p className="text-[10px] text-amber-400 italic">Replaced: {item.supersession_reason}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <div style={{width:80,height:4,background:"var(--bg-3)",borderRadius:99,overflow:"hidden"}}>
-                    <div style={{height:"100%",background:"var(--accent)",borderRadius:99,width:`${((obStep+1)/OB_QUESTIONS.length)*100}%`,transition:"width 0.4s ease"}}/>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-white/[0.07] flex justify-end shrink-0">
+              <button
+                onClick={() => setInspectMem(null)}
+                className="px-4 py-1.5 text-xs text-txt-2 hover:text-white rounded-xl bg-white/[0.05] hover:bg-white/[0.1] transition-all cursor-pointer"
+              >
+                Close Lineage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ONBOARDING WIZARD MODAL */}
+      {showOb && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-card bg-[#0e111a] rounded-2xl w-full max-w-lg border border-white/[0.1] shadow-2xl p-6 sm:p-7 relative overflow-hidden">
+            {obDone ? (
+              <div className="text-center py-6">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl mx-auto mb-4">
+                  ✓
+                </div>
+                <h3 className="text-base font-bold text-white mb-2">Memory Graph Seeded</h3>
+                <p className="text-xs text-txt-3 max-w-xs mx-auto leading-relaxed mb-6">
+                  Engram has integrated your preferences, tech stack, and background into its graph.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowOb(false);
+                    setObDone(false);
+                    setObStep(0);
+                  }}
+                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+                >
+                  Start Exploring →
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Seed Your Knowledge Graph</h3>
+                    <p className="text-[11px] text-txt-3">Question {obStep + 1} of {OB_QUESTIONS.length}</p>
+                  </div>
+                  <div className="w-24 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-300"
+                      style={{ width: `${((obStep + 1) / OB_QUESTIONS.length) * 100}%` }}
+                    />
                   </div>
                 </div>
-                <p style={{fontSize:14,lineHeight:1.7,marginBottom:16,color:"var(--text)"}}>{OB_QUESTIONS[obStep]}</p>
-                <textarea value={obAnswers[obStep]} onChange={e=>{const n=[...obAnswers];n[obStep]=e.target.value;setObAnswers(n);}}
-                  onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))saveOb();}}
-                  placeholder="Your answer…" rows={3} style={{
-                    width:"100%",background:"var(--bg-3)",border:"1px solid var(--border)",borderRadius:12,
-                    padding:"12px 14px",fontSize:13,color:"var(--text)",outline:"none",resize:"none",
-                    fontFamily:"inherit",lineHeight:1.65,boxSizing:"border-box",transition:"border-color 0.15s"
-                  }}/>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:16}}>
-                  <button onClick={()=>setObStep(s=>Math.max(0,s-1))} disabled={obStep===0}
-                    style={{fontSize:12,color:"var(--text-2)",background:"none",border:"none",cursor:obStep===0?"default":"pointer",opacity:obStep===0?0.3:1}}>
+
+                <p className="text-xs text-txt font-medium leading-relaxed mb-3">
+                  {OB_QUESTIONS[obStep]}
+                </p>
+
+                <textarea
+                  value={obAnswers[obStep]}
+                  onChange={(e) => {
+                    const n = [...obAnswers];
+                    n[obStep] = e.target.value;
+                    setObAnswers(n);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveOb();
+                  }}
+                  placeholder="Your answer…"
+                  rows={4}
+                  className="w-full bg-[#141724] border border-white/[0.08] focus:border-indigo-500/60 rounded-xl p-3 text-xs text-txt placeholder:text-txt-4 outline-none resize-none leading-relaxed mb-4"
+                />
+
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setObStep((s) => Math.max(0, s - 1))}
+                    disabled={obStep === 0}
+                    className="text-xs text-txt-3 hover:text-txt-2 disabled:opacity-20 cursor-pointer"
+                  >
                     ← Back
                   </button>
-                  <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>setShowOb(false)} style={{padding:"8px 14px",fontSize:12,color:"var(--text-2)",background:"none",border:"none",cursor:"pointer"}}>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowOb(false)}
+                      className="px-3 py-1.5 text-xs text-txt-3 hover:text-white cursor-pointer"
+                    >
                       Skip
                     </button>
-                    <button onClick={saveOb} disabled={!obAnswers[obStep].trim()||obSaving} style={{
-                      padding:"8px 20px",background:"var(--accent)",border:"none",borderRadius:10,
-                      color:"white",fontSize:12,fontWeight:500,cursor:!obAnswers[obStep].trim()||obSaving?"default":"pointer",
-                      opacity:!obAnswers[obStep].trim()||obSaving?0.35:1,transition:"opacity 0.15s"
-                    }}>
-                      {obSaving?"Saving…":obStep===OB_QUESTIONS.length-1?"Finish →":"Next →"}
+                    <button
+                      onClick={saveOb}
+                      disabled={!obAnswers[obStep].trim() || obSaving}
+                      className="px-5 py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-40 transition-all cursor-pointer"
+                    >
+                      {obSaving
+                        ? "Saving…"
+                        : obStep === OB_QUESTIONS.length - 1
+                        ? "Finish Setup →"
+                        : "Next →"}
                     </button>
                   </div>
                 </div>

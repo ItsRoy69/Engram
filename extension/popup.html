@@ -5,60 +5,275 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Engram Memory</title>
   <style>
+    :root {
+      --bg: #090a0f;
+      --bg-card: #10131d;
+      --bg-card-sub: #151a28;
+      --bg-input: #121624;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.16);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-light: #818cf8;
+      --green: #10b981;
+      --red: #ef4444;
+      --amber: #f59e0b;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      width: 300px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 14px;
-      background: #0f0f1a;
-      color: #e0e0ff;
+      width: 370px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      background-image: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12), transparent 60%);
+      color: var(--text);
+      line-height: 1.45;
+      overflow-x: hidden;
+      user-select: none;
     }
 
+    /* HEADER */
     .header {
-      padding: 16px;
-      border-bottom: 1px solid #2a2a4e;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .header h1 {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-    }
-
-    .header span {
-      font-size: 11px;
-      color: #6060aa;
-    }
-
-    .toggle-row {
       padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid #1e1e3e;
+      background: rgba(16, 19, 29, 0.7);
+      backdrop-filter: blur(12px);
     }
 
-    .toggle-label { color: #c0c0ee; font-size: 13px; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
 
-    .toggle {
+    .brand-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      padding: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    }
+
+    .brand-logo-inner {
+      width: 100%;
+      height: 100%;
+      background: #0d0f17;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-info h1 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-pro {
+      font-size: 9px;
+      font-family: monospace;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: var(--accent-light);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+    }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      padding: 8px 14px 4px;
+      gap: 6px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 6px 0;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .tab-btn.active {
+      background: var(--bg-card);
+      border-color: var(--border);
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .tab-btn:hover:not(.active) {
+      color: var(--text-muted);
+    }
+
+    /* MAIN CONTAINER */
+    .content-area {
+      padding: 12px 16px;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    /* STATUS ROW */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 11px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      font-weight: 500;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+    }
+
+    .dot.online {
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    }
+
+    .dot.offline {
+      background: var(--red);
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+    }
+
+    .dot.degraded {
+      background: var(--amber);
+    }
+
+    .memory-badge {
+      font-family: monospace;
+      color: var(--accent-light);
+      font-size: 11px;
+    }
+
+    /* TOGGLE SWITCH ROW */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0 4px;
+    }
+
+    .toggle-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .toggle-desc {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+      line-height: 1.35;
+    }
+
+    .switch {
       position: relative;
-      width: 38px;
+      width: 40px;
       height: 22px;
+      flex-shrink: 0;
     }
 
-    .toggle input { opacity: 0; width: 0; height: 0; }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
 
     .slider {
       position: absolute;
       inset: 0;
-      background: #2a2a4e;
+      background: #1f2537;
+      border: 1px solid var(--border);
       border-radius: 22px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .slider::before {
@@ -66,167 +281,311 @@
       position: absolute;
       width: 16px;
       height: 16px;
-      left: 3px;
-      top: 3px;
-      background: #6060aa;
+      left: 2px;
+      top: 2px;
+      background: #9ca3af;
       border-radius: 50%;
-      transition: transform 0.2s, background 0.2s;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    input:checked + .slider { background: #3a3a8e; }
-    input:checked + .slider::before { transform: translateX(16px); background: #8080ff; }
+    input:checked + .slider {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+    }
 
-    .section { padding: 14px 16px; border-bottom: 1px solid #1e1e3e; }
+    input:checked + .slider::before {
+      transform: translateX(18px);
+      background: #ffffff;
+    }
+
+    /* INPUTS & FORMS */
+    .form-group {
+      margin-bottom: 10px;
+    }
 
     label {
       display: block;
-      font-size: 11px;
-      color: #6060aa;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-dim);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
 
     input[type="text"],
     input[type="password"],
-    input[type="email"] {
+    input[type="email"],
+    textarea {
       width: 100%;
       padding: 8px 10px;
-      background: #1a1a2e;
-      border: 1px solid #2a2a4e;
-      border-radius: 6px;
-      color: #e0e0ff;
-      font-size: 13px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #ffffff;
+      font-size: 12px;
+      font-family: inherit;
       outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
 
-    input[type="text"]:focus,
-    input[type="password"]:focus,
-    input[type="email"]:focus { border-color: #5050aa; }
+    input:focus, textarea:focus {
+      border-color: rgba(99, 102, 241, 0.5);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+    }
 
-    .status {
-      padding: 12px 16px;
+    textarea {
+      resize: vertical;
+      min-height: 60px;
+      line-height: 1.4;
+    }
+
+    /* BUTTONS */
+    .btn {
+      width: 100%;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      color: #6060aa;
-      border-bottom: 1px solid #1e1e3e;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 2px 10px rgba(99, 102, 241, 0.25);
+      transition: all 0.15s;
     }
 
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #3a3a6e;
-      flex-shrink: 0;
+    .btn:hover {
+      opacity: 0.95;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
     }
 
-    .dot.online { background: #40c080; }
-    .dot.offline { background: #c04040; }
-
-    .footer { padding: 14px 16px; }
-
-    button {
-      width: 100%;
-      padding: 9px;
-      background: #3a3a8e;
-      color: #e0e0ff;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s;
+    .btn:active {
+      transform: scale(0.98);
     }
 
-    button:hover { background: #5050aa; }
-    button:active { background: #2a2a7e; }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
 
-    #save-msg {
-      margin-top: 8px;
-      text-align: center;
-      font-size: 12px;
-      color: #40c080;
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      box-shadow: none;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      box-shadow: none;
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      box-shadow: none;
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+      color: #ffffff;
+    }
+
+    .feedback-msg {
+      font-size: 11px;
       min-height: 16px;
+      text-align: center;
+      margin-top: 6px;
+      transition: opacity 0.2s;
+    }
+
+    .feedback-msg.success { color: var(--green); }
+    .feedback-msg.error { color: var(--red); }
+    .feedback-msg.info { color: var(--accent-light); }
+
+    /* FOOTER */
+    .footer {
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .link {
+      color: var(--accent-light);
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .link:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
 
-<div class="header">
-  <h1>🧠 Engram</h1>
-  <span>Memory Layer</span>
-</div>
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-logo">
+        <div class="brand-logo-inner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>
+            <path d="M2 18a10 10 0 0 1 20 0"/>
+          </svg>
+        </div>
+      </div>
+      <div class="brand-info">
+        <h1>Engram <span class="badge-pro">ACTIVE</span></h1>
+      </div>
+    </div>
 
-<div class="toggle-row">
-  <span class="toggle-label">Memory injection</span>
-  <label class="toggle">
-    <input type="checkbox" id="enabled-toggle" checked>
-    <span class="slider"></span>
-  </label>
-</div>
-
-<div class="status">
-  <div class="dot" id="status-dot"></div>
-  <span id="status-text">Checking API…</span>
-</div>
-<div class="status-line" id="status-line">
-  <span id="memory-count" style="font-size:11px;color:#6060aa;">Memories: —</span>
-  <button id="test-btn" class="link-btn">Test connection</button>
-</div>
-<div class="status-line">
-  <span id="account-line" style="font-size:11px;color:#9090d0;"></span>
-</div>
-
-<div class="status" id="account-status" style="display:none">
-  <span id="account-info" style="font-size:11px;color:#c0c0f0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-</div>
-
-<div class="status-row">
-  <span id="memory-count" style="color:#9090d0">Memories: —</span>
-  <button id="test-btn" style="width:auto;padding:5px 10px;background:#3a3a8e;margin:0">Test connection</button>
-</div>
-
-<div class="section" id="auth-section">
-  <label>Engram account</label>
-  <input type="email" id="login-email" placeholder="you@example.com" autocomplete="username" style="margin-bottom:8px">
-  <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" style="margin-bottom:10px">
-  <div style="display:flex;gap:8px">
-    <button id="login-btn" style="flex:1.4">Sign in</button>
-    <button id="logout-btn" style="flex:1;background:#4a2a4e;display:none">Sign out</button>
+    <div class="header-actions">
+      <button class="icon-btn" id="open-chat-btn" title="Open Web Chat UI">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="10" y1="14" x2="21" y2="3"></line>
+        </svg>
+      </button>
+    </div>
   </div>
-  <p id="login-msg" style="margin-top:8px;font-size:11px;min-height:14px;color:#40c080;line-height:1.5"></p>
-</div>
 
-<div class="section">
-  <label>API URL</label>
-  <input type="text" id="api-base" value="http://localhost:8000" placeholder="http://localhost:8000">
-</div>
+  <!-- TABS NAV -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-overview">Overview</button>
+    <button class="tab-btn" data-tab="tab-stash">✦ Quick Stash</button>
+    <button class="tab-btn" data-tab="tab-settings">Settings</button>
+  </div>
 
-<div class="section">
-  <label>API token</label>
-  <input type="password" id="api-token" placeholder="Bearer access token" style="font-size:11px">
-  <p style="margin-top:6px;font-size:11px;color:#6060aa;line-height:1.5">
-    Saved automatically when you sign in above. You can also paste one
-    manually from the chat-ui or <code>POST /auth/login</code>.
-  </p>
-</div>
+  <div class="content-area">
+    <!-- OVERVIEW TAB -->
+    <div id="tab-overview" class="tab-content active">
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div class="status-pill">
+          <div class="dot" id="status-dot"></div>
+          <span id="status-text">Checking API…</span>
+        </div>
+        <div class="memory-badge" id="memory-count">Memories: —</div>
+      </div>
 
-<div class="section">
-  <label>Refresh token (optional)</label>
-  <input type="password" id="refresh-token" placeholder="Long-lived refresh token" style="font-size:11px">
-  <p style="margin-top:6px;font-size:11px;color:#6060aa;line-height:1.5">
-    Also saved on sign-in. It auto-renews the access token so you never
-    need a fresh one.
-  </p>
-</div>
+      <!-- Memory Injection Toggle Card -->
+      <div class="card">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-title">Memory Injection</div>
+            <div class="toggle-desc">Automatically recalls memories inside ChatGPT & Claude.ai</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="enabled-toggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
 
-<div class="footer">
-  <button id="save-btn">Save settings</button>
-  <div id="save-msg"></div>
-</div>
+      <!-- Account Card -->
+      <div class="card" id="account-card">
+        <!-- Signed in view -->
+        <div id="auth-signed-in" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:13px;" id="user-avatar">
+                U
+              </div>
+              <div style="min-width:0;max-width:170px;">
+                <div style="font-weight:600;color:#ffffff;font-size:12px;" id="user-name">User</div>
+                <div style="font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="user-email">email@domain.com</div>
+              </div>
+            </div>
+            <button id="logout-btn" class="btn btn-secondary" style="width:auto;padding:4px 10px;font-size:11px;">Sign out</button>
+          </div>
+          <button id="test-btn" class="btn btn-secondary" style="font-size:11px;padding:6px 10px;">⚡ Test Graph Connection</button>
+        </div>
 
-<script src="popup.js"></script>
+        <!-- Signed out view -->
+        <div id="auth-signed-out">
+          <label id="auth-form-label">Sign in to Engram</label>
+          <div class="form-group" id="signup-username-wrap" style="display:none">
+            <input type="text" id="login-username" placeholder="Display name" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <input type="email" id="login-email" placeholder="you@example.com" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+          </div>
+          <button id="login-btn" class="btn">Sign in to sync memories →</button>
+          <div style="text-align:center;margin-top:8px;">
+            <button type="button" id="toggle-auth-mode" class="link" style="background:none;border:none;font-size:11px;">Create an account</button>
+          </div>
+          <div id="login-msg" class="feedback-msg"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUICK STASH TAB (Direct capture from popup) -->
+    <div id="tab-stash" class="tab-content">
+      <div class="card">
+        <label>Capture Knowledge Instantly</label>
+        <div class="form-group">
+          <textarea id="stash-text" placeholder="Type a preference, project detail, or fact to remember…"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Tags (optional)</label>
+          <input type="text" id="stash-tags" placeholder="work, tech, preferences">
+        </div>
+        <button id="capture-tab-btn" class="btn btn-secondary" style="margin-bottom:8px;">Capture current tab title</button>
+        <button id="stash-btn" class="btn">Save Fact to Graph</button>
+        <div id="stash-msg" class="feedback-msg"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" class="tab-content">
+      <div class="card">
+        <div class="form-group">
+          <label>API Endpoint</label>
+          <input type="text" id="api-base" value="http://localhost:8000" placeholder="http://localhost:8000">
+        </div>
+
+        <div class="form-group">
+          <label>Access Token</label>
+          <input type="password" id="api-token" placeholder="Bearer JWT token">
+        </div>
+
+        <div class="form-group">
+          <label>Refresh Token (optional)</label>
+          <input type="password" id="refresh-token" placeholder="Long-lived refresh token">
+        </div>
+
+        <button id="save-btn" class="btn btn-secondary">Save Configuration</button>
+        <div id="save-msg" class="feedback-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>Private & Local First</span>
+    <a class="link" id="footer-chat-link">Open Web Workspace ↗</a>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 </html>

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Engram — Memory Layer",
-  description: "Private, self-hosted AI memory",
+  title: "Engram — Persistent AI Memory",
+  description: "Private, self-hosted personal AI memory and knowledge graph",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -265,67 +265,120 @@
       el = document.createElement("div");
       el.id = "engram-indicator";
       el.style.cssText = [
-        "position:fixed", "bottom:80px", "right:20px",
-        "background:#1a1a2e", "color:#e0e0ff", "padding:8px 14px",
-        "border-radius:8px", "font-size:13px", "font-family:system-ui",
-        "z-index:99999", "box-shadow:0 2px 12px rgba(0,0,0,0.4)",
-        "border:1px solid #3a3a6e", "transition:opacity 0.3s",
+        "position:fixed", "bottom:78px", "right:18px",
+        "background:rgba(13,15,23,0.90)",
+        "backdrop-filter:blur(12px)",
+        "-webkit-backdrop-filter:blur(12px)",
+        "color:#a5b4fc",
+        "padding:6px 12px 6px 10px",
+        "border-radius:20px",
+        "font-size:12px",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "font-weight:500",
+        "z-index:99999",
+        "box-shadow:0 4px 18px rgba(0,0,0,0.4),0 0 0 1px rgba(99,102,241,0.35)",
+        "border:1px solid rgba(99,102,241,0.35)",
+        "transition:opacity 0.22s ease",
+        "display:flex", "align-items:center", "gap:6px",
         "pointer-events:none"
       ].join(";");
       document.body.appendChild(el);
     }
-    el.textContent = "🧠 " + text;
+    el.innerHTML = "⚡ <span>" + text + "</span>";
     el.style.opacity = "1";
     clearTimeout(el._hideTimer);
     el._hideTimer = setTimeout(() => { el.style.opacity = "0"; }, 3000);
   }
 
-  async function showMemoryToast(memories, injectedAt) {
+  async function showMemoryToast(memories) {
   const dup = document.getElementById("engram-toast");
   if (dup) dup.remove();
 
   const toast = document.createElement("div");
   toast.id = "engram-toast";
   Object.assign(toast.style, {
-    position: "fixed", right: "16px", bottom: "16px", zIndex: "2147483647",
-    background: "#12122a", color: "#e0e0ff", border: "1px solid #3a3a7e",
-    borderRadius: "10px", padding: "10px 14px", font: "12px/1.4 system-ui, sans-serif",
-    boxShadow: "0 6px 24px rgba(0,0,0,.5)", cursor: "pointer",
-    maxWidth: "320px", opacity: "0", transform: "translateY(8px)",
-    transition: "opacity .18s ease, transform .18s ease",
+    position:         "fixed",
+    right:            "18px",
+    bottom:           "18px",
+    zIndex:           "2147483647",
+    background:       "rgba(13, 15, 23, 0.92)",
+    backdropFilter:   "blur(14px)",
+    webkitBackdropFilter: "blur(14px)",
+    border:           "1px solid rgba(99, 102, 241, 0.4)",
+    borderRadius:     "14px",
+    padding:          "10px 14px",
+    font:             "13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    boxShadow:        "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset",
+    cursor:           "pointer",
+    maxWidth:         "340px",
+    opacity:          "0",
+    transform:        "translateY(10px)",
+    transition:       "opacity 0.22s cubic-bezier(0.16,1,0.3,1), transform 0.22s cubic-bezier(0.16,1,0.3,1)",
+    userSelect:       "none",
   });
-  toast.textContent = `Engram: ${memories.length} memor${memories.length === 1 ? "y" : "ies"} added`;
+
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;align-items:center;gap:7px;";
+
+  const iconEl = document.createElement("span");
+  iconEl.textContent = "⚡";
+  iconEl.style.fontSize = "13px";
+
+  const labelEl = document.createElement("span");
+  labelEl.style.cssText = "font-size:12px;font-weight:600;color:#ffffff;";
+  labelEl.textContent = `${memories.length} memor${memories.length === 1 ? "y" : "ies"} recalled`;
+
+  const pillEl = document.createElement("span");
+  pillEl.style.cssText = "font-size:10px;padding:2px 7px;border-radius:20px;background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);color:#a5b4fc;font-family:monospace;margin-left:auto;";
+  pillEl.textContent = "Engram";
+
+  header.appendChild(iconEl);
+  header.appendChild(labelEl);
+  header.appendChild(pillEl);
+  toast.appendChild(header);
 
   const list = document.createElement("div");
-  list.style.cssText = "display:none;margin-top:8px;border-top:1px solid #3a3a7e;padding-top:8px;font-size:11px;color:#a0a0d0;max-height:180px;overflow:auto;";
-  memories.slice(0, 12).forEach((m, i) => {
-    const row = document.createElement("div");
+  list.style.cssText = "display:none;margin-top:8px;border-top:1px solid rgba(255,255,255,0.07);padding-top:8px;";
+
+  memories.slice(0, 10).forEach((m) => {
     const v = typeof m === "string" ? m : (m.text || m.content || JSON.stringify(m));
-    row.textContent = `- ${String(v).replace(/\s+/g, " ").slice(0, 120)}`;
-    row.style.marginBottom = "4px";
+    const row = document.createElement("div");
+    row.style.cssText = "font-size:11px;color:#9ca3af;margin-bottom:3px;line-height:1.4;";
+    row.textContent = "\u00b7 " + String(v).replace(/\s+/g, " ").slice(0, 100);
     list.appendChild(row);
   });
-  if (memories.length > 12) {
+
+  if (memories.length > 10) {
     const more = document.createElement("div");
-    more.textContent = `… and ${memories.length - 12} more`;
-    more.style.color = "#7070c0";
+    more.style.cssText = "font-size:10px;color:#6366f1;margin-top:3px;";
+    more.textContent = "+" + (memories.length - 10) + " more memories";
     list.appendChild(more);
   }
-  toast.appendChild(listipse);
+
+  const hint = document.createElement("div");
+  hint.style.cssText = "font-size:10px;color:#4b5563;margin-top:5px;";
+  hint.textContent = "Click to expand";
+  toast.appendChild(hint);
+  toast.appendChild(list);
+
   toast.addEventListener("click", () => {
-    list.style.display = list.style.display === "none" ? "block" : "none";
+    const expanded = list.style.display !== "none";
+    list.style.display = expanded ? "none" : "block";
+    hint.style.display = expanded ? "" : "none";
   });
 
   document.documentElement.appendChild(toast);
   requestAnimationFrame(() => {
-    toast.style.opacity = "1";
-    toast.style.transform = "translateY(0)";
+    requestAnimationFrame(() => {
+      toast.style.opacity = "1";
+      toast.style.transform = "translateY(0)";
+    });
   });
   setTimeout(() => {
     toast.style.opacity = "0";
-    toast.style.transform = "translateY(8px)";
-    setTimeout(() => toast.remove(), 220);
-  }, 4000);
+    toast.style.transform = "translateY(10px)";
+    setTimeout(() => toast.remove(), 240);
+  }, 5000);
 }
 
 async function injectMemories(inputEl) {
