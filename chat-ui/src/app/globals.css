@@ -178,7 +178,16 @@ body {
   transition: transform 0.15s ease, filter 0.15s ease;
 }
 .graph-node:hover {
-  filter: brightness(1.2);
+  filter: brightness(1.25);
+  transform: scale(1.08);
+}
+
+/* Extra polish */
+.line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 @media (max-width: 768px) {
