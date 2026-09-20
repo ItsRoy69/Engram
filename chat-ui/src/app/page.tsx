@@ -7,6 +7,8 @@ import MemoryCard from "@/components/MemoryCard";
 import EmptyState from "@/components/EmptyState";
 import GraphView from "@/components/GraphView";
 import LoadingSkeleton from "@/components/LoadingSkeleton";
+import PromptStarter from "@/components/PromptStarter";
+import StatusBadge from "@/components/StatusBadge";
 
 type Role = "user" | "assistant";
 interface Message {
@@ -118,153 +120,6 @@ function ThinkingDots() {
         className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse-dot"
         style={{ animationDelay: "0.4s" }}
       />
-    </div>
-  );
-}
-
-function KnowledgeGraphView({
-  memories,
-  onOpen,
-}: {
-  memories: Memory[];
-  onOpen: (m: Memory) => void;
-}) {
-  const nodes = memories.slice(0, 42);
-  const tags = Array.from(
-    new Set(nodes.flatMap((m) => m.tags || []).filter(Boolean)),
-  ).slice(0, 8);
-  const w = 760;
-  const h = 460;
-  const cx = w / 2;
-  const cy = h / 2;
-  const tagR = 92;
-  const memR = 188;
-
-  const tagPos = tags.map((tag, i) => {
-    const a = (i / Math.max(tags.length, 1)) * Math.PI * 2 - Math.PI / 2;
-    return { tag, x: cx + Math.cos(a) * tagR, y: cy + Math.sin(a) * tagR };
-  });
-
-  const memPos = nodes.map((m, i) => {
-    const a = (i / Math.max(nodes.length, 1)) * Math.PI * 2 - Math.PI / 2;
-    return {
-      m,
-      x: cx + Math.cos(a) * memR,
-      y: cy + Math.sin(a) * memR,
-      tag: m.tags?.[0],
-    };
-  });
-
-  if (nodes.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[360px] text-center px-6">
-        <p className="text-sm font-medium text-white mb-1">
-          No graph nodes yet
-        </p>
-        <p className="text-xs text-txt-3 max-w-sm">
-          Save memories from chat or the vault and they will appear here as
-          connected facts.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0d16]">
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        className="w-full h-auto max-h-[min(460px,58vh)]"
-      >
-        <defs>
-          <radialGradient id="graphGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(99,102,241,0.18)" />
-            <stop offset="100%" stopColor="rgba(99,102,241,0)" />
-          </radialGradient>
-        </defs>
-        <circle cx={cx} cy={cy} r="210" fill="url(#graphGlow)" />
-        {memPos.map((node, i) => {
-          const t = tagPos.find((p) => p.tag === node.tag);
-          const x2 = t ? t.x : cx;
-          const y2 = t ? t.y : cy;
-          return (
-            <line
-              key={`e-${i}`}
-              x1={node.x}
-              y1={node.y}
-              x2={x2}
-              y2={y2}
-              stroke="rgba(129,140,248,0.22)"
-              strokeWidth="1"
-            />
-          );
-        })}
-        {tagPos.map((t) => (
-          <g key={t.tag}>
-            <circle
-              cx={t.x}
-              cy={t.y}
-              r="18"
-              fill="#1a1338"
-              stroke="rgba(167,139,250,0.55)"
-              strokeWidth="1.4"
-            />
-            <text
-              x={t.x}
-              y={t.y + 3}
-              textAnchor="middle"
-              fill="#c4b5fd"
-              fontSize="8"
-              fontFamily="ui-monospace, monospace"
-            >
-              #{t.tag.slice(0, 8)}
-            </text>
-          </g>
-        ))}
-        <circle
-          cx={cx}
-          cy={cy}
-          r="22"
-          fill="#11141f"
-          stroke="rgba(99,102,241,0.7)"
-          strokeWidth="1.6"
-        />
-        <text
-          x={cx}
-          y={cy + 3}
-          textAnchor="middle"
-          fill="#a5b4fc"
-          fontSize="9"
-          fontWeight="600"
-        >
-          You
-        </text>
-        {memPos.map((node) => (
-          <g
-            key={node.m.id}
-            className="graph-node"
-            onClick={() => onOpen(node.m)}
-          >
-            <title>{node.m.content}</title>
-            <circle
-              cx={node.x}
-              cy={node.y}
-              r="7"
-              fill="#6366f1"
-              stroke="#c7d2fe"
-              strokeWidth="1"
-            />
-            <text
-              x={node.x}
-              y={node.y + 16}
-              textAnchor="middle"
-              fill="#9ca3af"
-              fontSize="7"
-            >
-              {node.m.content.replace(/\s+/g, " ").slice(0, 16)}
-            </text>
-          </g>
-        ))}
-      </svg>
     </div>
   );
 }
@@ -971,20 +826,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] text-[11px] text-txt-3">
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400 animate-pulse-dot" : "bg-red-400"}`}
-              />
-              <span>{online ? "Graph Connected" : "Connecting API"}</span>
-              {healthData?.graph?.nodes !== undefined && (
-                <>
-                  <span>·</span>
-                  <span className="font-mono text-txt-2">
-                    {healthData.graph.nodes} nodes
-                  </span>
-                </>
-              )}
-            </div>
+            <StatusBadge online={online} model={healthData?.model} />
 
             {panel === "chat" && messages.length > 0 && (
               <button
@@ -1194,21 +1036,13 @@ export default function Home() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
                     {PROMPT_STARTERS.map((item, idx) => (
-                      <button
+                      <PromptStarter
                         key={idx}
-                        onClick={() => sendMessageWithText(item.prompt)}
-                        className="p-3.5 rounded-xl bg-[#11141e] hover:bg-[#161a28] border border-white/[0.06] hover:border-indigo-500/30 transition-all text-left group cursor-pointer shadow-sm"
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-base">{item.icon}</span>
-                          <span className="text-xs font-semibold text-white group-hover:text-indigo-300 transition-colors">
-                            {item.title}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-txt-3 line-clamp-2 leading-relaxed">
-                          {item.prompt}
-                        </p>
-                      </button>
+                        icon={item.icon}
+                        title={item.title}
+                        prompt={item.prompt}
+                        onClick={(p) => sendMessageWithText(p)}
+                      />
                     ))}
                   </div>
                 </div>
