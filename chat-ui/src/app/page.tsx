@@ -4,6 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { api, Memory, HealthResult, friendlyError } from "@/lib/api";
 import { getUser, logout, isLoggedIn, type User } from "@/lib/auth";
 import MemoryCard from "@/components/MemoryCard";
+import EmptyState from "@/components/EmptyState";
+import GraphView from "@/components/GraphView";
+import LoadingSkeleton from "@/components/LoadingSkeleton";
 
 type Role = "user" | "assistant";
 interface Message {
@@ -1059,25 +1062,23 @@ export default function Home() {
                 </div>
               )}
 
-              {!loadingMem && filteredMems.length === 0 && (
-                <div className="text-center py-20">
-                  <p className="text-sm font-medium text-white mb-1">
-                    {memSearch
-                      ? "No matches in vault"
-                      : "No memories saved yet"}
-                  </p>
-                  <p className="text-xs text-txt-3 mb-4">
-                    Teach Engram a fact and it will show up here with tags and
-                    lineage.
-                  </p>
-                  <button
-                    onClick={() => setShowAddMem(true)}
-                    className="text-xs text-indigo-300 hover:text-white"
-                  >
-                    Add your first memory →
-                  </button>
-                </div>
-              )}
+              {loadingMem ? (
+                <LoadingSkeleton count={4} />
+              ) : filteredMems.length === 0 ? (
+                <EmptyState
+                  icon="🧠"
+                  title={
+                    memSearch ? "No matches in vault" : "No memories saved yet"
+                  }
+                  description={
+                    memSearch
+                      ? "Try a different search term."
+                      : "Chat with Engram or add memories manually to start building your knowledge graph."
+                  }
+                  actionLabel={!memSearch ? "+ Add memory" : undefined}
+                  onAction={!memSearch ? () => setShowAddMem(true) : undefined}
+                />
+              ) : null}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredMems.map((m) => (
@@ -1129,9 +1130,12 @@ export default function Home() {
                 <span>Click a node to inspect lineage</span>
               </div>
 
-              <KnowledgeGraphView
+              <GraphView
                 memories={filteredMems}
                 onOpen={openLineage}
+                stats={healthData?.graph}
+                online={online}
+                model={healthData?.model}
               />
 
               <div className="p-4 bg-gradient-to-br from-indigo-950/20 to-purple-950/20 border border-indigo-500/20 rounded-2xl">
